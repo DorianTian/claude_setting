@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "effortLevel": "high",
+  "alwaysThinkingEnabled": true,
+  "cleanupPeriodDays": 365,
+
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Skill"
+    ],
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Edit(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Edit(~/.gnupg/**)",
+      "Read(~/.aws/**)",
+      "Edit(~/.aws/**)",
+      "Read(~/.azure/**)",
+      "Edit(~/.azure/**)",
+      "Read(~/.kube/config)",
+      "Edit(~/.kube/config)",
+      "Read(~/.docker/config.json)",
+      "Edit(~/.docker/config.json)",
+      "Read(~/.npmrc)",
+      "Edit(~/.npmrc)",
+      "Read(~/.git-credentials)",
+      "Edit(~/.git-credentials)",
+      "Read(~/.config/gh/**)",
+      "Edit(~/.config/gh/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Read(**/credentials.json)",
+      "Edit(**/credentials.json)",
+      "Read(**/*secret*)",
+      "Edit(**/*secret*)"
+    ]
+  },
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty'); if echo \"$input\" | grep -qE 'rm\\s+-(r|f|rf|fr)\\s+(/|~|\\$HOME)'; then echo 'BLOCK: rm -rf on root/home detected. Use trash-cli or specify a safe path.'; exit 2; fi"
+          },
+          {
+            "type": "command",
+            "command": "input=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty'); if echo \"$input\" | grep -qE 'git\\s+push\\s+.*--force.*\\b(main|master)\\b|git\\s+push\\s+--force\\s+(origin\\s+)?(main|master)'; then echo 'BLOCK: Force push to main/master is not allowed.'; exit 2; fi"
+          },
+          {
+            "type": "command",
+            "command": "input=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty'); if echo \"$input\" | grep -qE 'DROP\\s+(DATABASE|TABLE|SCHEMA)'; then echo 'BLOCK: DROP DATABASE/TABLE/SCHEMA requires manual confirmation.'; exit 2; fi"
+          }
+        ]
+      }
+    ]
+  },
+
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh",
+    "padding": 2
+  },
+
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
+    "BASH_DEFAULT_TIMEOUT_MS": "120000",
+    "BASH_MAX_TIMEOUT_MS": "600000"
+  },
+
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "planning-with-files@planning-with-files": true,
+    "skill-creator@claude-plugins-official": true
+  },
+
+  "extraKnownMarketplaces": {
+    "planning-with-files": {
+      "source": {
+        "source": "github",
+        "repo": "OthmanAdi/planning-with-files"
+      }
+    }
+  }
+}
