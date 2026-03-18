@@ -7,13 +7,13 @@ set -euo pipefail
 #   claude-config                    Interactive mode
 #   claude-config --all              Install all config files
 #   claude-config --statusline       Install statusline only
-#   claude-config --sync             Symlink Memory to iCloud
+#   claude-config --memory           Symlink Memory to iCloud
 #   claude-config --knowledge        Symlink Knowledge to iCloud
 #   claude-config --pull-memory      Pull Memory from iCloud (one-time copy)
 #   claude-config --pull-knowledge   Pull Knowledge from iCloud (one-time copy)
 #   claude-config --force            Overwrite config files without creating .bak backup
 #   claude-config --link             Register CLI command (~/.local/bin/claude-config)
-#   Flags can be combined: claude-config --all --sync --knowledge
+#   Flags can be combined: claude-config --all --memory --knowledge
 # ══════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,7 +23,7 @@ CLAUDE_DIR="$HOME/.claude"
 INSTALL_SETTINGS=false
 INSTALL_STATUSLINE=false
 INSTALL_CLAUDE_MD=false
-SYNC=false
+MEMORY=false
 KNOWLEDGE=false
 PULL_MEMORY=false
 PULL_KNOWLEDGE=false
@@ -38,7 +38,7 @@ else
     case "$arg" in
       --all) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
       --statusline) INSTALL_STATUSLINE=true ;;
-      --sync) SYNC=true ;;
+      --memory) MEMORY=true ;;
       --knowledge) KNOWLEDGE=true ;;
       --pull-memory) PULL_MEMORY=true ;;
       --pull-knowledge) PULL_KNOWLEDGE=true ;;
@@ -53,7 +53,7 @@ else
         echo "    --statusline      Install statusline only"
         echo ""
         echo "  iCloud sync (symlink, real-time):"
-        echo "    --sync            Symlink Memory to iCloud"
+        echo "    --memory          Symlink Memory to iCloud"
         echo "    --knowledge       Symlink Knowledge to iCloud"
         echo ""
         echo "  iCloud pull (one-time copy, no symlink):"
@@ -65,7 +65,7 @@ else
         echo "    --link            Register 'claude-config' CLI command"
         echo "    --help            Show this help"
         echo ""
-        echo "  Flags can be combined: claude-config --all --sync --knowledge"
+        echo "  Flags can be combined: claude-config --all --memory --knowledge"
         exit 0
         ;;
     esac
@@ -111,7 +111,7 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       8) PULL_KNOWLEDGE=true ;;
       9) LINK=true ;;
       0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
-         SYNC=true; KNOWLEDGE=true; LINK=true ;;
+         MEMORY=true; KNOWLEDGE=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
     esac
   done
@@ -181,7 +181,7 @@ check_icloud() {
 }
 
 # ── Sync Memory (symlink) ──
-if [[ "$SYNC" == "true" ]]; then
+if [[ "$MEMORY" == "true" ]]; then
   echo ""
   echo "▶ Sync Memory → iCloud..."
   if check_icloud; then
@@ -311,7 +311,7 @@ ITEMS=()
 [[ "$INSTALL_SETTINGS" == "true" ]] && ITEMS+=("settings.json")
 [[ "$INSTALL_STATUSLINE" == "true" ]] && ITEMS+=("statusline.sh")
 [[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
-[[ "$SYNC" == "true" ]] && ITEMS+=("Memory→iCloud")
+[[ "$MEMORY" == "true" ]] && ITEMS+=("Memory→iCloud")
 [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
 [[ "$PULL_MEMORY" == "true" ]] && ITEMS+=("Memory←iCloud")
 [[ "$PULL_KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge←iCloud")

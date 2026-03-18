@@ -16,7 +16,7 @@ After `--link`, you can use `claude-config` from anywhere:
 
 ```bash
 claude-config             # Interactive menu
-claude-config --all --sync --knowledge   # Full setup
+claude-config --all --memory --knowledge  # Full setup
 ```
 
 ## New Machine Setup
@@ -68,7 +68,7 @@ Context bar color: green (<50%) → yellow (<75%) → orange (<90%) → red (>90
 claude-config                    # Interactive menu
 claude-config --all              # Install all config files
 claude-config --statusline       # Install statusline only
-claude-config --sync             # Symlink Memory to iCloud
+claude-config --memory           # Symlink Memory to iCloud
 claude-config --knowledge        # Symlink Knowledge to iCloud
 claude-config --pull-memory      # Pull Memory from iCloud (one-time copy)
 claude-config --pull-knowledge   # Pull Knowledge from iCloud (one-time copy)
@@ -77,7 +77,7 @@ claude-config --link             # Register CLI command
 claude-config --help             # Show help
 ```
 
-Flags can be combined: `claude-config --all --sync --knowledge`
+Flags can be combined: `claude-config --all --memory --knowledge`
 
 ## iCloud Sync
 
@@ -86,12 +86,12 @@ For syncing Memory and Knowledge across multiple Macs.
 ### Primary machine (real-time sync via symlink)
 
 ```bash
-claude-config --sync --knowledge
+claude-config --memory --knowledge
 ```
 
 | Flag | What it does |
 |------|-------------|
-| `--sync` | Symlink `~/.claude/.../memory/` → `iCloud Drive/claude-memory/` |
+| `--memory` | Symlink `~/.claude/.../memory/` → `iCloud Drive/claude-memory/` |
 | `--knowledge` | Symlink `~/Knowledge/` → `iCloud Drive/Knowledge/` |
 
 ### Secondary machine (one-time pull, no symlink)
