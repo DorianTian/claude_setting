@@ -4,14 +4,15 @@ set -euo pipefail
 # ══════════════════════════════════════════════════════════
 # claude-config — Claude Code Config Installer
 # Usage:
-#   claude-config                 Interactive mode
-#   claude-config --all           Install all config files
-#   claude-config --statusline    Install statusline only
-#   claude-config --sync          Symlink Memory to iCloud
-#   claude-config --knowledge     Symlink Knowledge to iCloud
-#   claude-config --pull          Pull Memory & Knowledge from iCloud
-#   claude-config --force         Overwrite without backup
-#   claude-config --link          Register CLI command (~/.local/bin/claude-config)
+#   claude-config                    Interactive mode
+#   claude-config --all              Install all config files
+#   claude-config --statusline       Install statusline only
+#   claude-config --sync             Symlink Memory to iCloud
+#   claude-config --knowledge        Symlink Knowledge to iCloud
+#   claude-config --pull-memory      Pull Memory from iCloud (one-time copy)
+#   claude-config --pull-knowledge   Pull Knowledge from iCloud (one-time copy)
+#   claude-config --force            Overwrite config files without creating .bak backup
+#   claude-config --link             Register CLI command (~/.local/bin/claude-config)
 #   Flags can be combined: claude-config --all --sync --knowledge
 # ══════════════════════════════════════════════════════════
 
@@ -24,7 +25,8 @@ INSTALL_STATUSLINE=false
 INSTALL_CLAUDE_MD=false
 SYNC=false
 KNOWLEDGE=false
-PULL=false
+PULL_MEMORY=false
+PULL_KNOWLEDGE=false
 FORCE=false
 LINK=false
 INTERACTIVE=false
@@ -38,22 +40,32 @@ else
       --statusline) INSTALL_STATUSLINE=true ;;
       --sync) SYNC=true ;;
       --knowledge) KNOWLEDGE=true ;;
-      --pull) PULL=true ;;
+      --pull-memory) PULL_MEMORY=true ;;
+      --pull-knowledge) PULL_KNOWLEDGE=true ;;
       --force) FORCE=true ;;
       --link) LINK=true ;;
       --help|-h)
         echo "Usage: claude-config [options]"
         echo ""
-        echo "Options:"
-        echo "  (none)          Interactive mode"
-        echo "  --all           Install all config files"
-        echo "  --statusline    Install statusline only"
-        echo "  --sync          Symlink Memory to iCloud"
-        echo "  --knowledge     Symlink Knowledge to iCloud"
-        echo "  --pull          Pull Memory & Knowledge from iCloud"
-        echo "  --force         Overwrite without backup"
-        echo "  --link          Register CLI command"
-        echo "  --help          Show this help"
+        echo "  Config files:"
+        echo "    (none)            Interactive mode"
+        echo "    --all             Install all config files (settings + statusline + CLAUDE.md)"
+        echo "    --statusline      Install statusline only"
+        echo ""
+        echo "  iCloud sync (symlink, real-time):"
+        echo "    --sync            Symlink Memory to iCloud"
+        echo "    --knowledge       Symlink Knowledge to iCloud"
+        echo ""
+        echo "  iCloud pull (one-time copy, no symlink):"
+        echo "    --pull-memory     Pull Memory from iCloud"
+        echo "    --pull-knowledge  Pull Knowledge from iCloud"
+        echo ""
+        echo "  Other:"
+        echo "    --force           Overwrite config files without creating .bak backup"
+        echo "    --link            Register 'claude-config' CLI command"
+        echo "    --help            Show this help"
+        echo ""
+        echo "  Flags can be combined: claude-config --all --sync --knowledge"
         exit 0
         ;;
     esac
@@ -66,24 +78,25 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo "  claude-config — Claude Code Config Installer"
   echo "══════════════════════════════════════════════════════════"
   echo ""
-  echo "  Select components to install:"
-  echo ""
   echo "  Config files:"
-  echo "    1) settings.json     (deny rules + hooks + statusline + env)"
-  echo "    2) statusline.sh     (dir + branch / model + context + cost)"
-  echo "    3) CLAUDE.md         (global instructions)"
-  echo "    4) All config files  (1 + 2 + 3)"
+  echo "    1) settings.json       (deny rules + hooks + statusline + env)"
+  echo "    2) statusline.sh       (dir + branch / model + context + cost)"
+  echo "    3) CLAUDE.md           (global instructions)"
+  echo "    4) All config files    (1 + 2 + 3)"
   echo ""
-  echo "  iCloud sync:"
-  echo "    5) Sync Memory       (symlink to iCloud)"
-  echo "    6) Sync Knowledge    (symlink to iCloud)"
-  echo "    7) Pull from iCloud  (one-time copy, no symlink)"
+  echo "  iCloud sync (symlink, real-time):"
+  echo "    5) Sync Memory         → iCloud"
+  echo "    6) Sync Knowledge      → iCloud"
+  echo ""
+  echo "  iCloud pull (one-time copy, no symlink):"
+  echo "    7) Pull Memory         ← iCloud"
+  echo "    8) Pull Knowledge      ← iCloud"
   echo ""
   echo "  Other:"
-  echo "    8) Register CLI      (claude-config command)"
-  echo "    9) Full setup        (all configs + iCloud sync + CLI)"
+  echo "    9) Register CLI        (claude-config command)"
+  echo "    0) Full setup          (all configs + sync Memory & Knowledge + CLI)"
   echo ""
-  printf "  Enter choices (e.g. 1 2 5, or 9 for full): "
+  printf "  Enter choices (e.g. 1 2 5, or 0 for full): "
   read -r choices
 
   for choice in $choices; do
@@ -94,9 +107,10 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       4) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
       5) SYNC=true ;;
       6) KNOWLEDGE=true ;;
-      7) PULL=true ;;
-      8) LINK=true ;;
-      9) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
+      7) PULL_MEMORY=true ;;
+      8) PULL_KNOWLEDGE=true ;;
+      9) LINK=true ;;
+      0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
          SYNC=true; KNOWLEDGE=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
     esac
@@ -127,9 +141,7 @@ safe_install() {
 }
 
 # ── Config files ──
-HAS_CONFIG=false
 if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INSTALL_CLAUDE_MD" == "true" ]]; then
-  HAS_CONFIG=true
   echo ""
   echo "▶ Config files..."
   [[ "$INSTALL_SETTINGS" == "true" ]] && safe_install "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json" "settings.json"
@@ -168,7 +180,7 @@ check_icloud() {
   return 0
 }
 
-# ── Sync Memory ──
+# ── Sync Memory (symlink) ──
 if [[ "$SYNC" == "true" ]]; then
   echo ""
   echo "▶ Sync Memory → iCloud..."
@@ -203,7 +215,7 @@ if [[ "$SYNC" == "true" ]]; then
   fi
 fi
 
-# ── Sync Knowledge ──
+# ── Sync Knowledge (symlink) ──
 if [[ "$KNOWLEDGE" == "true" ]]; then
   echo ""
   echo "▶ Sync Knowledge → iCloud..."
@@ -228,13 +240,13 @@ if [[ "$KNOWLEDGE" == "true" ]]; then
   fi
 fi
 
-# ── Pull from iCloud ──
-if [[ "$PULL" == "true" ]]; then
+# ── Pull Memory (one-time copy) ──
+if [[ "$PULL_MEMORY" == "true" ]]; then
   echo ""
-  echo "▶ Pull from iCloud (one-time copy)..."
+  echo "▶ Pull Memory ← iCloud..."
   if check_icloud; then
     if [[ -L "$MEMORY_PATH" ]]; then
-      echo "  ⚠ Memory is already symlinked, --pull not needed"
+      echo "  ⚠ Memory is already symlinked, pull not needed"
     elif [[ -d "$ICLOUD_MEMORY" ]]; then
       mkdir -p "$MEMORY_PATH"
       PULLED=0; SKIPPED=0
@@ -259,13 +271,20 @@ if [[ "$PULL" == "true" ]]; then
     else
       echo "  - No iCloud memory found"
     fi
+  fi
+fi
 
+# ── Pull Knowledge (one-time copy) ──
+if [[ "$PULL_KNOWLEDGE" == "true" ]]; then
+  echo ""
+  echo "▶ Pull Knowledge ← iCloud..."
+  if check_icloud; then
     if [[ -L "$HOME/Knowledge" ]]; then
-      echo "  ⚠ Knowledge is already symlinked, --pull not needed"
+      echo "  ⚠ Knowledge is already symlinked, pull not needed"
     elif [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
       mkdir -p "$HOME/Knowledge"
       cp -rn "$ICLOUD_KNOWLEDGE/." "$HOME/Knowledge/" 2>/dev/null || true
-      echo "  ✓ Knowledge: pulled from iCloud"
+      echo "  ✓ Knowledge: pulled from iCloud (new files only, no overwrite)"
     else
       echo "  - No iCloud Knowledge found"
     fi
@@ -294,7 +313,8 @@ ITEMS=()
 [[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
 [[ "$SYNC" == "true" ]] && ITEMS+=("Memory→iCloud")
 [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
-[[ "$PULL" == "true" ]] && ITEMS+=("iCloud→local")
+[[ "$PULL_MEMORY" == "true" ]] && ITEMS+=("Memory←iCloud")
+[[ "$PULL_KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge←iCloud")
 [[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
 
 if [[ ${#ITEMS[@]} -eq 0 ]]; then

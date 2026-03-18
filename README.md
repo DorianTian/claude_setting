@@ -65,15 +65,16 @@ Context bar color: green (<50%) → yellow (<75%) → orange (<90%) → red (>90
 ## CLI Usage
 
 ```bash
-claude-config                 # Interactive menu
-claude-config --all           # Install all config files
-claude-config --statusline    # Install statusline only
-claude-config --sync          # Symlink Memory to iCloud
-claude-config --knowledge     # Symlink Knowledge to iCloud
-claude-config --pull          # One-time copy from iCloud
-claude-config --force         # Overwrite without backup
-claude-config --link          # Register CLI command
-claude-config --help          # Show help
+claude-config                    # Interactive menu
+claude-config --all              # Install all config files
+claude-config --statusline       # Install statusline only
+claude-config --sync             # Symlink Memory to iCloud
+claude-config --knowledge        # Symlink Knowledge to iCloud
+claude-config --pull-memory      # Pull Memory from iCloud (one-time copy)
+claude-config --pull-knowledge   # Pull Knowledge from iCloud (one-time copy)
+claude-config --force            # Overwrite config files without creating .bak backup
+claude-config --link             # Register CLI command
+claude-config --help             # Show help
 ```
 
 Flags can be combined: `claude-config --all --sync --knowledge`
@@ -96,10 +97,12 @@ claude-config --sync --knowledge
 ### Secondary machine (one-time pull, no symlink)
 
 ```bash
-claude-config --pull
+claude-config --pull-memory      # Pull Memory only
+claude-config --pull-knowledge   # Pull Knowledge only
+claude-config --pull-memory --pull-knowledge  # Pull both
 ```
 
-Copies Memory & Knowledge from iCloud to local directories. Smart merge: keeps the newer file when both sides have the same filename.
+Smart merge: keeps the newer file when both sides have the same filename. Local-only files are not affected.
 
 ### No iCloud
 
