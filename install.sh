@@ -4,21 +4,25 @@ set -euo pipefail
 # ══════════════════════════════════════════════════════════
 # Claude Code Config Installer
 # Usage:
-#   ./install.sh            Install config files only
-#   ./install.sh --sync     Symlink Memory & Knowledge to iCloud (primary machine)
-#   ./install.sh --pull     Pull Memory from iCloud (one-time copy, no symlink; secondary machine)
-#   ./install.sh --force    Overwrite without backup
+#   ./install.sh                Install config files only
+#   ./install.sh --sync         Symlink Memory to iCloud (real-time sync)
+#   ./install.sh --knowledge    Symlink Knowledge to iCloud (real-time sync)
+#   ./install.sh --pull         Pull Memory & Knowledge from iCloud (one-time copy)
+#   ./install.sh --force        Overwrite without backup
+#   Flags can be combined: ./install.sh --sync --knowledge
 # ══════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 SYNC=false
+KNOWLEDGE=false
 PULL=false
 FORCE=false
 
 for arg in "$@"; do
   case "$arg" in
     --sync) SYNC=true ;;
+    --knowledge) KNOWLEDGE=true ;;
     --pull) PULL=true ;;
     --force) FORCE=true ;;
   esac
@@ -75,33 +79,41 @@ echo ""
 echo "▶ Step 3: Testing statusline..."
 TEST_OUTPUT=$(echo '{"model":{"display_name":"Test"},"context_window":{"used_percentage":25,"context_window_size":1000000,"current_usage":{"input_tokens":1000,"cache_read_input_tokens":500}},"cost":{"total_cost_usd":0.5,"total_lines_added":10,"total_lines_removed":3,"total_duration_ms":60000},"workspace":{"current_dir":"'"$HOME"'","project_dir":""}}' | "$CLAUDE_DIR/statusline.sh" 2>&1) && echo "  ✓ Statusline works" || echo "  ✗ Statusline failed: $TEST_OUTPUT"
 
-# ── Step 4: iCloud sync (only with --sync) ──
-if [[ "$SYNC" == "true" ]]; then
-  echo ""
-  echo "▶ Step 4: iCloud sync..."
+# ── iCloud helpers ──
+ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
+ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
+MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
+MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
 
-  ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
-
+check_icloud() {
   if [[ ! -d "$ICLOUD_DIR" ]]; then
-    echo "  ✗ iCloud Drive not found, skipping"
+    echo "  ✗ iCloud Drive not found"
     echo "    Sign in to iCloud and enable iCloud Drive first."
-  else
-    # ── Memory ──
-    MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
-    MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
-    ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
+    return 1
+  fi
+  return 0
+}
 
+HAS_ICLOUD_ACTION=false
+
+# ── Step 4a: --sync (Memory → iCloud symlink) ──
+if [[ "$SYNC" == "true" ]]; then
+  HAS_ICLOUD_ACTION=true
+  echo ""
+  echo "▶ Step 4a: Sync Memory to iCloud (symlink)..."
+
+  if check_icloud; then
     if [[ -L "$MEMORY_PATH" ]]; then
       echo "  = Memory (already symlinked)"
     else
       mkdir -p "$ICLOUD_MEMORY"
       if [[ -d "$MEMORY_PATH" ]]; then
-        echo "  ↻ Memory: copying local files to iCloud..."
-        # Copy local files to iCloud (won't overwrite existing newer files)
+        echo "  ↻ Memory: merging local → iCloud..."
         for f in "$MEMORY_PATH"/*; do
+          [[ -f "$f" ]] || continue
           fname="$(basename "$f")"
           if [[ -f "$ICLOUD_MEMORY/$fname" ]]; then
-            # iCloud already has this file — keep the newer one
             if [[ "$f" -nt "$ICLOUD_MEMORY/$fname" ]]; then
               cp "$f" "$ICLOUD_MEMORY/$fname"
               echo "    ↻ $fname (local is newer)"
@@ -119,10 +131,16 @@ if [[ "$SYNC" == "true" ]]; then
       ln -s "$ICLOUD_MEMORY" "$MEMORY_PATH"
       echo "  ✓ Memory → iCloud Drive/claude-memory"
     fi
+  fi
+fi
 
-    # ── Knowledge ──
-    ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
+# ── Step 4b: --knowledge (Knowledge → iCloud symlink) ──
+if [[ "$KNOWLEDGE" == "true" ]]; then
+  HAS_ICLOUD_ACTION=true
+  echo ""
+  echo "▶ Step 4b: Sync Knowledge to iCloud (symlink)..."
 
+  if check_icloud; then
     if [[ -L "$HOME/Knowledge" ]]; then
       echo "  = Knowledge (already symlinked)"
     elif [[ -d "$HOME/Knowledge" ]]; then
@@ -133,24 +151,28 @@ if [[ "$SYNC" == "true" ]]; then
       ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
       echo "  ✓ Knowledge → iCloud Drive/Knowledge"
     else
-      echo "  - Knowledge: ~/Knowledge not found, skipping"
+      echo "  - ~/Knowledge not found, creating symlink to iCloud..."
+      if [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
+        ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
+        echo "  ✓ Knowledge → iCloud Drive/Knowledge"
+      else
+        echo "  - No Knowledge in iCloud either, skipping"
+      fi
     fi
   fi
-elif [[ "$PULL" == "true" ]]; then
+fi
+
+# ── Step 4c: --pull (one-time copy from iCloud) ──
+if [[ "$PULL" == "true" ]]; then
+  HAS_ICLOUD_ACTION=true
   echo ""
-  echo "▶ Step 4: Pull Memory from iCloud (one-time copy, no symlink)..."
+  echo "▶ Step 4c: Pull from iCloud (one-time copy, no symlink)..."
 
-  ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
-
-  if [[ ! -d "$ICLOUD_DIR" ]]; then
-    echo "  ✗ iCloud Drive not found"
-    echo "    Sign in to iCloud and enable iCloud Drive first."
-  else
-    MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
-    MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
-    ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
-
-    if [[ -d "$ICLOUD_MEMORY" ]]; then
+  if check_icloud; then
+    # ── Pull Memory ──
+    if [[ -L "$MEMORY_PATH" ]]; then
+      echo "  ⚠ Memory is already symlinked, --pull not needed"
+    elif [[ -d "$ICLOUD_MEMORY" ]]; then
       mkdir -p "$MEMORY_PATH"
       PULLED=0
       SKIPPED=0
@@ -173,29 +195,29 @@ elif [[ "$PULL" == "true" ]]; then
       done
       echo "  ✓ Memory: pulled $PULLED files, skipped $SKIPPED (local is newer or same)"
     else
-      echo "  - No iCloud memory found (iCloud Drive/claude-memory)"
+      echo "  - No iCloud memory found"
     fi
 
-    # Knowledge always symlinks (read-heavy docs, no conflict risk)
-    ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
+    # ── Pull Knowledge ──
     if [[ -L "$HOME/Knowledge" ]]; then
-      echo "  = Knowledge (already symlinked)"
+      echo "  ⚠ Knowledge is already symlinked, --pull not needed"
     elif [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
-      if [[ -d "$HOME/Knowledge" ]]; then
-        cp -r "$HOME/Knowledge/." "$ICLOUD_KNOWLEDGE/"
-        rm -rf "$HOME/Knowledge"
-      fi
-      ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
-      echo "  ✓ Knowledge → iCloud Drive/Knowledge (symlinked)"
+      mkdir -p "$HOME/Knowledge"
+      cp -rn "$ICLOUD_KNOWLEDGE/." "$HOME/Knowledge/" 2>/dev/null || true
+      echo "  ✓ Knowledge: pulled from iCloud (new files only, no overwrite)"
     else
       echo "  - No iCloud Knowledge found"
     fi
   fi
-else
+fi
+
+# ── Hint if no iCloud flags ──
+if [[ "$HAS_ICLOUD_ACTION" == "false" ]]; then
   echo ""
-  echo "  ℹ Options:"
-  echo "    --sync   Symlink Memory & Knowledge to iCloud (primary machine)"
-  echo "    --pull   Pull Memory from iCloud (one-time copy) + symlink Knowledge"
+  echo "  ℹ iCloud options:"
+  echo "    --sync         Symlink Memory to iCloud"
+  echo "    --knowledge    Symlink Knowledge to iCloud"
+  echo "    --pull         One-time copy Memory & Knowledge from iCloud"
 fi
 
 # ── Done ──
@@ -208,10 +230,13 @@ echo "    ~/.claude/settings.json    (deny rules + hooks + statusline + env)"
 echo "    ~/.claude/statusline.sh    (dir + branch / model + context + cost)"
 echo "    ~/.claude/CLAUDE.md        (global instructions)"
 if [[ "$SYNC" == "true" ]]; then
-echo "    Memory    → iCloud Drive/claude-memory (symlinked)"
-echo "    Knowledge → iCloud Drive/Knowledge (symlinked)"
-elif [[ "$PULL" == "true" ]]; then
-echo "    Memory    ← iCloud Drive/claude-memory (one-time copy)"
-echo "    Knowledge → iCloud Drive/Knowledge (symlinked)"
+echo "    Memory    → iCloud (symlinked)"
+fi
+if [[ "$KNOWLEDGE" == "true" ]]; then
+echo "    Knowledge → iCloud (symlinked)"
+fi
+if [[ "$PULL" == "true" ]]; then
+echo "    Memory    ← iCloud (copied)"
+echo "    Knowledge ← iCloud (copied)"
 fi
 echo "══════════════════════════════════════════════════════════"
