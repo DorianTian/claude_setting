@@ -124,6 +124,13 @@ echo "════════════════════════�
 
 mkdir -p "$CLAUDE_DIR"
 
+# ── iCloud paths (used by config install + sync sections) ──
+ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
+ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
+ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
+MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
+MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
+
 # ── Helper: safe copy with backup ──
 safe_install() {
   local src="$1" dst="$2" name="$3"
@@ -149,7 +156,19 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
     safe_install "$SCRIPT_DIR/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline.sh"
     chmod +x "$CLAUDE_DIR/statusline.sh"
   fi
-  [[ "$INSTALL_CLAUDE_MD" == "true" ]] && safe_install "$SCRIPT_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+  if [[ "$INSTALL_CLAUDE_MD" == "true" ]]; then
+    ICLOUD_CLAUDE_MD="$ICLOUD_DIR/claude-memory/CLAUDE.md"
+    if [[ -L "$CLAUDE_DIR/CLAUDE.md" ]]; then
+      echo "  = CLAUDE.md (already symlinked)"
+    elif [[ -f "$ICLOUD_CLAUDE_MD" ]]; then
+      [[ -f "$CLAUDE_DIR/CLAUDE.md" && "$FORCE" != "true" ]] && cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.bak"
+      ln -sf "$ICLOUD_CLAUDE_MD" "$CLAUDE_DIR/CLAUDE.md"
+      echo "  ✓ CLAUDE.md → iCloud Drive/claude-memory/CLAUDE.md"
+    else
+      echo "  ✗ CLAUDE.md not found in iCloud (expected: $ICLOUD_CLAUDE_MD)"
+      echo "    Copy your CLAUDE.md to iCloud first, then re-run."
+    fi
+  fi
 fi
 
 # ── Dependency check (only if statusline involved) ──
@@ -165,12 +184,6 @@ if [[ "$INSTALL_STATUSLINE" == "true" ]]; then
 fi
 
 # ── iCloud helpers ──
-ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
-ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
-ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
-MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
-MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
-
 check_icloud() {
   if [[ ! -d "$ICLOUD_DIR" ]]; then
     echo "  ✗ iCloud Drive not found"

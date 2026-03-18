@@ -42,7 +42,7 @@ cd ~/Desktop/workspace/claude-code-config
 |------|-------------|-------------|
 | `settings.json` | `~/.claude/settings.json` | Permissions, deny rules, safety hooks, statusline, env tuning, plugins |
 | `statusline.sh` | `~/.claude/statusline.sh` | 2-line status bar (directory + git branch / model + context + cost) |
-| `CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions: interaction rules, coding standards, AI-driven dev mode |
+| `CLAUDE.md` | `~/.claude/CLAUDE.md` → iCloud | Global instructions (lives in iCloud, symlinked on install) |
 
 ## Settings Highlights
 
@@ -81,18 +81,21 @@ Flags can be combined: `claude-config --all --memory --knowledge`
 
 ## iCloud Sync
 
-For syncing Memory and Knowledge across multiple Macs.
+For syncing CLAUDE.md, Memory, and Knowledge across multiple Macs.
+
+**CLAUDE.md** lives in `iCloud Drive/claude-memory/CLAUDE.md` and is symlinked on all machines. `--all` handles this automatically — no separate flag needed.
 
 ### Primary machine (real-time sync via symlink)
 
 ```bash
-claude-config --memory --knowledge
+claude-config --all --memory --knowledge
 ```
 
-| Flag | What it does |
-|------|-------------|
-| `--memory` | Symlink `~/.claude/.../memory/` → `iCloud Drive/claude-memory/` |
-| `--knowledge` | Symlink `~/Knowledge/` → `iCloud Drive/Knowledge/` |
+| What | Symlink |
+|------|---------|
+| CLAUDE.md | `~/.claude/CLAUDE.md` → `iCloud Drive/claude-memory/CLAUDE.md` |
+| Memory | `~/.claude/.../memory/` → `iCloud Drive/claude-memory/` |
+| Knowledge | `~/Knowledge/` → `iCloud Drive/Knowledge/` |
 
 ### Secondary machine (one-time pull, no symlink)
 
@@ -110,7 +113,7 @@ Smart merge: keeps the newer file when both sides have the same filename. Local-
 claude-config --all
 ```
 
-Config files only. Memory and Knowledge stay local.
+CLAUDE.md still requires iCloud (it's the single source of truth). Config files (settings.json, statusline.sh) are copied from repo.
 
 ## Dependencies
 
