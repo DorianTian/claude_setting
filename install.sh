@@ -4,7 +4,8 @@ set -euo pipefail
 # ══════════════════════════════════════════════════════════
 # Claude Code Config Installer
 # Usage:
-#   ./install.sh                Install config files only
+#   ./install.sh                Install all config files
+#   ./install.sh --statusline   Install statusline only
 #   ./install.sh --sync         Symlink Memory to iCloud (real-time sync)
 #   ./install.sh --knowledge    Symlink Knowledge to iCloud (real-time sync)
 #   ./install.sh --pull         Pull Memory & Knowledge from iCloud (one-time copy)
@@ -18,6 +19,7 @@ SYNC=false
 KNOWLEDGE=false
 PULL=false
 FORCE=false
+STATUSLINE_ONLY=false
 
 for arg in "$@"; do
   case "$arg" in
@@ -25,6 +27,7 @@ for arg in "$@"; do
     --knowledge) KNOWLEDGE=true ;;
     --pull) PULL=true ;;
     --force) FORCE=true ;;
+    --statusline) STATUSLINE_ONLY=true ;;
   esac
 done
 
@@ -52,11 +55,17 @@ safe_install() {
 
 # ── Step 1: Config files ──
 echo ""
-echo "▶ Step 1: Installing config files..."
-safe_install "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json" "settings.json"
-safe_install "$SCRIPT_DIR/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline.sh"
-chmod +x "$CLAUDE_DIR/statusline.sh"
-safe_install "$SCRIPT_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+if [[ "$STATUSLINE_ONLY" == "true" ]]; then
+  echo "▶ Installing statusline only..."
+  safe_install "$SCRIPT_DIR/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline.sh"
+  chmod +x "$CLAUDE_DIR/statusline.sh"
+else
+  echo "▶ Step 1: Installing config files..."
+  safe_install "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json" "settings.json"
+  safe_install "$SCRIPT_DIR/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline.sh"
+  chmod +x "$CLAUDE_DIR/statusline.sh"
+  safe_install "$SCRIPT_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md" "CLAUDE.md"
+fi
 
 # ── Step 2: Verify dependencies ──
 echo ""
