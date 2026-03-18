@@ -5,10 +5,35 @@
 ## Quick Start
 
 ```bash
-git clone git@github.com:DorianTian/claude_setting.git claude-code-config
-cd claude-code-config
-./install.sh                        # Config files only
-./install.sh --sync --knowledge     # Full setup with iCloud sync
+git clone git@github.com:DorianTian/claude_setting.git ~/Desktop/workspace/claude-code-config
+cd ~/Desktop/workspace/claude-code-config
+./install.sh              # Interactive mode
+./install.sh --all        # Non-interactive: install all config files
+./install.sh --link       # Register CLI command
+```
+
+After `--link`, you can use `claude-config` from anywhere:
+
+```bash
+claude-config             # Interactive menu
+claude-config --all --sync --knowledge   # Full setup
+```
+
+## New Machine Setup
+
+```bash
+# 1. Clone
+git clone git@github.com:DorianTian/claude_setting.git ~/Desktop/workspace/claude-code-config
+cd ~/Desktop/workspace/claude-code-config
+
+# 2. Interactive install (select what you need)
+./install.sh
+
+# 3. Register CLI command (optional, select option 8 in interactive menu or:)
+./install.sh --link
+
+# Requires ~/.local/bin in PATH. If not, add to ~/.zshrc:
+#   export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ## What's Included
@@ -37,6 +62,22 @@ Opus 4.6  1M 42% [████████░░░░░░░░░░░░] 
 
 Context bar color: green (<50%) → yellow (<75%) → orange (<90%) → red (>90%)
 
+## CLI Usage
+
+```bash
+claude-config                 # Interactive menu
+claude-config --all           # Install all config files
+claude-config --statusline    # Install statusline only
+claude-config --sync          # Symlink Memory to iCloud
+claude-config --knowledge     # Symlink Knowledge to iCloud
+claude-config --pull          # One-time copy from iCloud
+claude-config --force         # Overwrite without backup
+claude-config --link          # Register CLI command
+claude-config --help          # Show help
+```
+
+Flags can be combined: `claude-config --all --sync --knowledge`
+
 ## iCloud Sync
 
 For syncing Memory and Knowledge across multiple Macs.
@@ -44,7 +85,7 @@ For syncing Memory and Knowledge across multiple Macs.
 ### Primary machine (real-time sync via symlink)
 
 ```bash
-./install.sh --sync --knowledge
+claude-config --sync --knowledge
 ```
 
 | Flag | What it does |
@@ -55,7 +96,7 @@ For syncing Memory and Knowledge across multiple Macs.
 ### Secondary machine (one-time pull, no symlink)
 
 ```bash
-./install.sh --pull
+claude-config --pull
 ```
 
 Copies Memory & Knowledge from iCloud to local directories. Smart merge: keeps the newer file when both sides have the same filename.
@@ -63,22 +104,10 @@ Copies Memory & Knowledge from iCloud to local directories. Smart merge: keeps t
 ### No iCloud
 
 ```bash
-./install.sh
+claude-config --all
 ```
 
 Config files only. Memory and Knowledge stay local.
-
-## install.sh Flags
-
-| Flag | Description |
-|------|-------------|
-| (none) | Install config files only |
-| `--sync` | Symlink Memory to iCloud |
-| `--knowledge` | Symlink Knowledge to iCloud |
-| `--pull` | One-time copy Memory & Knowledge from iCloud |
-| `--force` | Overwrite without backup |
-
-Flags can be combined: `./install.sh --sync --knowledge --force`
 
 ## Dependencies
 
@@ -87,7 +116,7 @@ Flags can be combined: `./install.sh --sync --knowledge --force`
 
 ## Related Repos
 
-| Repo | Description |
-|------|-------------|
-| [skills_repo](https://github.com/DorianTian/skills_repo) | Claude Code skills & plugins |
-| [cursor_vscode_config](https://github.com/DorianTian/cursor_vscode_config) | IDE configuration (Cursor/VSCode/Neovim/formatters) |
+| Repo | CLI Command | Description |
+|------|-------------|-------------|
+| [skills_repo](https://github.com/DorianTian/skills_repo) | `claude-skills` | Claude Code skills & plugins |
+| [cursor_vscode_config](https://github.com/DorianTian/cursor_vscode_config) | `ide-config` | IDE configuration (Cursor/VSCode/Neovim/Ghostty/Zsh/formatters) |
