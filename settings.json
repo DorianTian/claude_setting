@@ -88,8 +88,6 @@
     "gopls-lsp@claude-plugins-official": true
   },
 
-  "append_system_prompt": "file://~/.claude/prompt/global-prompt.md",
-
   "extraKnownMarketplaces": {
     "planning-with-files": {
       "source": {
