@@ -8,10 +8,9 @@ set -euo pipefail
 #   claude-config --all              Install all config files
 #   claude-config --statusline       Install statusline only
 #   claude-config --knowledge        Symlink Knowledge to iCloud
-#   claude-config --pull-knowledge   Pull Knowledge from iCloud (one-time copy)
-#   claude-config --force            Overwrite config files without creating .bak backup
+#   claude-config --ai-daily         Symlink AI-Daily to iCloud
 #   claude-config --link             Register CLI command (~/.local/bin/claude-config)
-#   Flags can be combined: claude-config --all --knowledge
+#   Flags can be combined: claude-config --all --knowledge --ai-daily
 # ══════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -22,8 +21,7 @@ INSTALL_SETTINGS=false
 INSTALL_STATUSLINE=false
 INSTALL_CLAUDE_MD=false
 KNOWLEDGE=false
-PULL_KNOWLEDGE=false
-FORCE=false
+AI_DAILY=false
 LINK=false
 INTERACTIVE=false
 
@@ -35,8 +33,7 @@ else
       --all) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
       --statusline) INSTALL_STATUSLINE=true ;;
       --knowledge) KNOWLEDGE=true ;;
-      --pull-knowledge) PULL_KNOWLEDGE=true ;;
-      --force) FORCE=true ;;
+      --ai-daily) AI_DAILY=true ;;
       --link) LINK=true ;;
       --help|-h)
         echo "Usage: claude-config [options]"
@@ -48,16 +45,13 @@ else
         echo ""
         echo "  iCloud sync (symlink, real-time):"
         echo "    --knowledge       Symlink Knowledge to iCloud"
-        echo ""
-        echo "  iCloud pull (one-time copy, no symlink):"
-        echo "    --pull-knowledge  Pull Knowledge from iCloud"
+        echo "    --ai-daily        Symlink AI-Daily to iCloud"
         echo ""
         echo "  Other:"
-        echo "    --force           Overwrite config files without creating .bak backup"
         echo "    --link            Register 'claude-config' CLI command"
         echo "    --help            Show this help"
         echo ""
-        echo "  Flags can be combined: claude-config --all --memory --knowledge"
+        echo "  Flags can be combined: claude-config --all --knowledge --ai-daily"
         exit 0
         ;;
     esac
@@ -78,13 +72,11 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo ""
   echo "  iCloud sync (symlink, real-time):"
   echo "    5) Sync Knowledge      → iCloud"
-  echo ""
-  echo "  iCloud pull (one-time copy, no symlink):"
-  echo "    6) Pull Knowledge      ← iCloud"
+  echo "    6) Sync AI-Daily       → iCloud"
   echo ""
   echo "  Other:"
   echo "    7) Register CLI        (claude-config command)"
-  echo "    0) Full setup          (all configs + sync Knowledge + CLI)"
+  echo "    0) Full setup          (all configs + sync Knowledge & AI-Daily + CLI)"
   echo ""
   printf "  Enter choices (e.g. 1 2 5, or 0 for full): "
   read -r choices
@@ -96,10 +88,10 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       3) INSTALL_CLAUDE_MD=true ;;
       4) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
       5) KNOWLEDGE=true ;;
-      6) PULL_KNOWLEDGE=true ;;
+      6) AI_DAILY=true ;;
       7) LINK=true ;;
       0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
-         KNOWLEDGE=true; LINK=true ;;
+         KNOWLEDGE=true; AI_DAILY=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
     esac
   done
@@ -115,17 +107,17 @@ mkdir -p "$CLAUDE_DIR"
 # ── iCloud paths (used by config install + sync sections) ──
 ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
 ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
+ICLOUD_AI_DAILY="$ICLOUD_DIR/AI-Daily"
 
 # ── Helper: safe copy with backup ──
 safe_install() {
   local src="$1" dst="$2" name="$3"
-  if [[ -f "$dst" && "$FORCE" != "true" ]]; then
+  if [[ -f "$dst" ]]; then
     if diff -q "$src" "$dst" &>/dev/null; then
       echo "  = $name (unchanged)"
       return
     fi
-    cp "$dst" "${dst}.bak"
-    echo "  ↻ $name (backed up → $(basename "$dst").bak)"
+    echo "  ↻ $name (overwritten)"
   else
     echo "  + $name"
   fi
@@ -146,8 +138,11 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
     if [[ -L "$CLAUDE_DIR/CLAUDE.md" ]]; then
       echo "  = CLAUDE.md (already symlinked)"
     elif [[ -f "$ICLOUD_CLAUDE_MD" ]]; then
-      [[ -f "$CLAUDE_DIR/CLAUDE.md" && "$FORCE" != "true" ]] && cp "$CLAUDE_DIR/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md.bak"
-      ln -sf "$ICLOUD_CLAUDE_MD" "$CLAUDE_DIR/CLAUDE.md"
+      if [[ -f "$CLAUDE_DIR/CLAUDE.md" ]]; then
+        rm -f "$CLAUDE_DIR/CLAUDE.md"
+        echo "  ↻ Local CLAUDE.md removed (iCloud is source of truth)"
+      fi
+      ln -s "$ICLOUD_CLAUDE_MD" "$CLAUDE_DIR/CLAUDE.md"
       echo "  ✓ CLAUDE.md → iCloud Drive/claude-memory/CLAUDE.md"
     else
       echo "  ✗ CLAUDE.md not found in iCloud (expected: $ICLOUD_CLAUDE_MD)"
@@ -185,39 +180,33 @@ if [[ "$KNOWLEDGE" == "true" ]]; then
   if check_icloud; then
     if [[ -L "$HOME/Knowledge" ]]; then
       echo "  = Knowledge (already symlinked)"
-    elif [[ -d "$HOME/Knowledge" ]]; then
-      mkdir -p "$ICLOUD_KNOWLEDGE"
-      echo "  ↻ Merging (iCloud wins on conflicts)..."
-      # 1. 本地有、iCloud 没有的文件 → 补到 iCloud（-n = no overwrite）
-      cp -rn "$HOME/Knowledge/." "$ICLOUD_KNOWLEDGE/" 2>/dev/null || true
-      # 2. 删除本地目录，建 symlink 指向 iCloud（iCloud 内容为准）
-      rm -rf "$HOME/Knowledge"
-      ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
-      echo "  ✓ Knowledge → iCloud Drive/Knowledge (iCloud is source of truth)"
     else
-      if [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
-        ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
-        echo "  ✓ Knowledge → iCloud Drive/Knowledge"
-      else
-        echo "  - No Knowledge found locally or in iCloud"
+      mkdir -p "$ICLOUD_KNOWLEDGE"
+      if [[ -d "$HOME/Knowledge" ]]; then
+        rm -rf "$HOME/Knowledge"
+        echo "  ↻ Local Knowledge removed (iCloud is source of truth)"
       fi
+      ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
+      echo "  ✓ Knowledge → iCloud Drive/Knowledge"
     fi
   fi
 fi
 
-# ── Pull Knowledge (one-time copy) ──
-if [[ "$PULL_KNOWLEDGE" == "true" ]]; then
+# ── Sync AI-Daily (symlink) ──
+if [[ "$AI_DAILY" == "true" ]]; then
   echo ""
-  echo "▶ Pull Knowledge ← iCloud..."
+  echo "▶ Sync AI-Daily → iCloud..."
   if check_icloud; then
-    if [[ -L "$HOME/Knowledge" ]]; then
-      echo "  ⚠ Knowledge is already symlinked, pull not needed"
-    elif [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
-      mkdir -p "$HOME/Knowledge"
-      cp -rn "$ICLOUD_KNOWLEDGE/." "$HOME/Knowledge/" 2>/dev/null || true
-      echo "  ✓ Knowledge: pulled from iCloud (new files only, no overwrite)"
+    if [[ -L "$HOME/AI-Daily" ]]; then
+      echo "  = AI-Daily (already symlinked)"
     else
-      echo "  - No iCloud Knowledge found"
+      mkdir -p "$ICLOUD_AI_DAILY"
+      if [[ -d "$HOME/AI-Daily" ]]; then
+        rm -rf "$HOME/AI-Daily"
+        echo "  ↻ Local AI-Daily removed (iCloud is source of truth)"
+      fi
+      ln -s "$ICLOUD_AI_DAILY" "$HOME/AI-Daily"
+      echo "  ✓ AI-Daily → iCloud Drive/AI-Daily"
     fi
   fi
 fi
@@ -243,7 +232,7 @@ ITEMS=()
 [[ "$INSTALL_STATUSLINE" == "true" ]] && ITEMS+=("statusline.sh")
 [[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
 [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
-[[ "$PULL_KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge←iCloud")
+[[ "$AI_DAILY" == "true" ]] && ITEMS+=("AI-Daily→iCloud")
 [[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
 
 if [[ ${#ITEMS[@]} -eq 0 ]]; then

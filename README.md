@@ -68,52 +68,48 @@ Context bar color: green (<50%) → yellow (<75%) → orange (<90%) → red (>90
 claude-config                    # Interactive menu
 claude-config --all              # Install all config files
 claude-config --statusline       # Install statusline only
-claude-config --memory           # Symlink Memory to iCloud
 claude-config --knowledge        # Symlink Knowledge to iCloud
-claude-config --pull-memory      # Pull Memory from iCloud (one-time copy)
-claude-config --pull-knowledge   # Pull Knowledge from iCloud (one-time copy)
-claude-config --force            # Overwrite config files without creating .bak backup
+claude-config --ai-daily         # Symlink AI-Daily to iCloud
 claude-config --link             # Register CLI command
 claude-config --help             # Show help
 ```
 
-Flags can be combined: `claude-config --all --memory --knowledge`
+Flags can be combined: `claude-config --all --knowledge --ai-daily`
 
 ## iCloud Sync
 
-For syncing CLAUDE.md, Memory, and Knowledge across multiple Macs.
+All machines use symlink to iCloud, script never writes to iCloud.
 
 **CLAUDE.md** lives in `iCloud Drive/claude-memory/CLAUDE.md` and is symlinked on all machines. `--all` handles this automatically — no separate flag needed.
 
-### Primary machine (real-time sync via symlink)
-
 ```bash
-claude-config --all --memory --knowledge
+claude-config --all --knowledge --ai-daily
 ```
 
 | What | Symlink |
 |------|---------|
 | CLAUDE.md | `~/.claude/CLAUDE.md` → `iCloud Drive/claude-memory/CLAUDE.md` |
-| Memory | `~/.claude/.../memory/` → `iCloud Drive/claude-memory/` |
 | Knowledge | `~/Knowledge/` → `iCloud Drive/Knowledge/` |
+| AI-Daily | `~/AI-Daily/` → `iCloud Drive/AI-Daily/` |
 
-### Secondary machine (one-time pull, no symlink)
+Local conflicts are overwritten directly — iCloud is source of truth, script never writes to iCloud.
 
-```bash
-claude-config --pull-memory      # Pull Memory only
-claude-config --pull-knowledge   # Pull Knowledge only
-claude-config --pull-memory --pull-knowledge  # Pull both
-```
+## AI Daily Digest
 
-Smart merge: keeps the newer file when both sides have the same filename. Local-only files are not affected.
-
-### No iCloud
+每日自动抓取 AI 资讯（HN + GitHub Trending + ArXiv），存储在 iCloud Drive 多端同步。
 
 ```bash
-claude-config --all
+# 手动抓取
+node ~/Desktop/workspace/claude-code-config/scripts/ai-daily.mjs
+
+# 主力机自动抓取（crontab，每天 9:07 AM）
+# 7 9 * * * /opt/homebrew/bin/node ~/Desktop/workspace/claude-code-config/scripts/ai-daily.mjs >> ~/AI-Daily/cron.log 2>&1
+
+# 其他 Mac 只需 symlink
+claude-config --ai-daily
 ```
 
-CLAUDE.md still requires iCloud (it's the single source of truth). Config files (settings.json, statusline.sh) are copied from repo.
+每天生成两份文件：`.md`（完整链接）+ `.txt`（纯文本快速阅读）。
 
 ## Dependencies
 
