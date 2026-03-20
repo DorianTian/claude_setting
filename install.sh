@@ -7,13 +7,11 @@ set -euo pipefail
 #   claude-config                    Interactive mode
 #   claude-config --all              Install all config files
 #   claude-config --statusline       Install statusline only
-#   claude-config --memory           Symlink Memory to iCloud
 #   claude-config --knowledge        Symlink Knowledge to iCloud
-#   claude-config --pull-memory      Pull Memory from iCloud (one-time copy)
 #   claude-config --pull-knowledge   Pull Knowledge from iCloud (one-time copy)
 #   claude-config --force            Overwrite config files without creating .bak backup
 #   claude-config --link             Register CLI command (~/.local/bin/claude-config)
-#   Flags can be combined: claude-config --all --memory --knowledge
+#   Flags can be combined: claude-config --all --knowledge
 # ══════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,9 +21,7 @@ CLAUDE_DIR="$HOME/.claude"
 INSTALL_SETTINGS=false
 INSTALL_STATUSLINE=false
 INSTALL_CLAUDE_MD=false
-MEMORY=false
 KNOWLEDGE=false
-PULL_MEMORY=false
 PULL_KNOWLEDGE=false
 FORCE=false
 LINK=false
@@ -38,9 +34,7 @@ else
     case "$arg" in
       --all) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
       --statusline) INSTALL_STATUSLINE=true ;;
-      --memory) MEMORY=true ;;
       --knowledge) KNOWLEDGE=true ;;
-      --pull-memory) PULL_MEMORY=true ;;
       --pull-knowledge) PULL_KNOWLEDGE=true ;;
       --force) FORCE=true ;;
       --link) LINK=true ;;
@@ -53,11 +47,9 @@ else
         echo "    --statusline      Install statusline only"
         echo ""
         echo "  iCloud sync (symlink, real-time):"
-        echo "    --memory          Symlink Memory to iCloud"
         echo "    --knowledge       Symlink Knowledge to iCloud"
         echo ""
         echo "  iCloud pull (one-time copy, no symlink):"
-        echo "    --pull-memory     Pull Memory from iCloud"
         echo "    --pull-knowledge  Pull Knowledge from iCloud"
         echo ""
         echo "  Other:"
@@ -85,16 +77,14 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo "    4) All config files    (1 + 2 + 3)"
   echo ""
   echo "  iCloud sync (symlink, real-time):"
-  echo "    5) Sync Memory         → iCloud"
-  echo "    6) Sync Knowledge      → iCloud"
+  echo "    5) Sync Knowledge      → iCloud"
   echo ""
   echo "  iCloud pull (one-time copy, no symlink):"
-  echo "    7) Pull Memory         ← iCloud"
-  echo "    8) Pull Knowledge      ← iCloud"
+  echo "    6) Pull Knowledge      ← iCloud"
   echo ""
   echo "  Other:"
-  echo "    9) Register CLI        (claude-config command)"
-  echo "    0) Full setup          (all configs + sync Memory & Knowledge + CLI)"
+  echo "    7) Register CLI        (claude-config command)"
+  echo "    0) Full setup          (all configs + sync Knowledge + CLI)"
   echo ""
   printf "  Enter choices (e.g. 1 2 5, or 0 for full): "
   read -r choices
@@ -105,13 +95,11 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       2) INSTALL_STATUSLINE=true ;;
       3) INSTALL_CLAUDE_MD=true ;;
       4) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
-      5) SYNC=true ;;
-      6) KNOWLEDGE=true ;;
-      7) PULL_MEMORY=true ;;
-      8) PULL_KNOWLEDGE=true ;;
-      9) LINK=true ;;
+      5) KNOWLEDGE=true ;;
+      6) PULL_KNOWLEDGE=true ;;
+      7) LINK=true ;;
       0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
-         MEMORY=true; KNOWLEDGE=true; LINK=true ;;
+         KNOWLEDGE=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
     esac
   done
@@ -126,10 +114,7 @@ mkdir -p "$CLAUDE_DIR"
 
 # ── iCloud paths (used by config install + sync sections) ──
 ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs"
-ICLOUD_MEMORY="$ICLOUD_DIR/claude-memory"
 ICLOUD_KNOWLEDGE="$ICLOUD_DIR/Knowledge"
-MEMORY_DIR_NAME="$(echo "$HOME" | tr '/' '-')"
-MEMORY_PATH="$HOME/.claude/projects/$MEMORY_DIR_NAME/memory"
 
 # ── Helper: safe copy with backup ──
 safe_install() {
@@ -193,41 +178,6 @@ check_icloud() {
   return 0
 }
 
-# ── Sync Memory (symlink) ──
-if [[ "$MEMORY" == "true" ]]; then
-  echo ""
-  echo "▶ Sync Memory → iCloud..."
-  if check_icloud; then
-    if [[ -L "$MEMORY_PATH" ]]; then
-      echo "  = Memory (already symlinked)"
-    else
-      mkdir -p "$ICLOUD_MEMORY"
-      if [[ -d "$MEMORY_PATH" ]]; then
-        echo "  ↻ Merging local → iCloud..."
-        for f in "$MEMORY_PATH"/*; do
-          [[ -f "$f" ]] || continue
-          fname="$(basename "$f")"
-          if [[ -f "$ICLOUD_MEMORY/$fname" ]]; then
-            if [[ "$f" -nt "$ICLOUD_MEMORY/$fname" ]]; then
-              cp "$f" "$ICLOUD_MEMORY/$fname"
-              echo "    ↻ $fname (local is newer)"
-            else
-              echo "    = $fname (iCloud is newer, kept)"
-            fi
-          else
-            cp "$f" "$ICLOUD_MEMORY/$fname"
-            echo "    + $fname"
-          fi
-        done
-        rm -rf "$MEMORY_PATH"
-      fi
-      mkdir -p "$(dirname "$MEMORY_PATH")"
-      ln -s "$ICLOUD_MEMORY" "$MEMORY_PATH"
-      echo "  ✓ Memory → iCloud Drive/claude-memory"
-    fi
-  fi
-fi
-
 # ── Sync Knowledge (symlink) ──
 if [[ "$KNOWLEDGE" == "true" ]]; then
   echo ""
@@ -251,40 +201,6 @@ if [[ "$KNOWLEDGE" == "true" ]]; then
       else
         echo "  - No Knowledge found locally or in iCloud"
       fi
-    fi
-  fi
-fi
-
-# ── Pull Memory (one-time copy) ──
-if [[ "$PULL_MEMORY" == "true" ]]; then
-  echo ""
-  echo "▶ Pull Memory ← iCloud..."
-  if check_icloud; then
-    if [[ -L "$MEMORY_PATH" ]]; then
-      echo "  ⚠ Memory is already symlinked, pull not needed"
-    elif [[ -d "$ICLOUD_MEMORY" ]]; then
-      mkdir -p "$MEMORY_PATH"
-      PULLED=0; SKIPPED=0
-      for f in "$ICLOUD_MEMORY"/*; do
-        [[ -f "$f" ]] || continue
-        fname="$(basename "$f")"
-        if [[ -f "$MEMORY_PATH/$fname" ]]; then
-          if [[ "$f" -nt "$MEMORY_PATH/$fname" ]]; then
-            cp "$f" "$MEMORY_PATH/$fname"
-            echo "    ↻ $fname (iCloud is newer)"
-            ((PULLED++))
-          else
-            ((SKIPPED++))
-          fi
-        else
-          cp "$f" "$MEMORY_PATH/$fname"
-          echo "    + $fname"
-          ((PULLED++))
-        fi
-      done
-      echo "  ✓ Memory: pulled $PULLED, skipped $SKIPPED"
-    else
-      echo "  - No iCloud memory found"
     fi
   fi
 fi
@@ -326,9 +242,7 @@ ITEMS=()
 [[ "$INSTALL_SETTINGS" == "true" ]] && ITEMS+=("settings.json")
 [[ "$INSTALL_STATUSLINE" == "true" ]] && ITEMS+=("statusline.sh")
 [[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
-[[ "$MEMORY" == "true" ]] && ITEMS+=("Memory→iCloud")
 [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
-[[ "$PULL_MEMORY" == "true" ]] && ITEMS+=("Memory←iCloud")
 [[ "$PULL_KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge←iCloud")
 [[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
 
