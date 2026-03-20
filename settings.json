@@ -70,8 +70,7 @@
 
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 2
+    "command": "$HOME/.cargo/bin/ccometixline"
   },
 
   "env": {
