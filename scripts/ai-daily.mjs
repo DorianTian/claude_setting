@@ -1,20 +1,29 @@
 #!/usr/bin/env node
 
 /**
- * AI Daily Digest - 每日 AI 资讯自动抓取
+ * AI Daily Digest - 每日技术资讯自动抓取
  *
- * Output: ~/AI-Daily/{YYYY-MM}/{YYYY-MM-DD}.md + .txt (iCloud synced)
- * Dedup: skips if today's .md already exists (safe for multi-Mac cron)
+ * 7 板块:
+ *   1. AI 产品与发布 (Top 5)
+ *   2. AI 工程与工具 (Top 10) ← 重点
+ *   3. AI 工具生态 Top 5 (全局视角)
+ *   4. Agent / RAG / LLM 应用 (Top 5)
+ *   5. 开源热点 (Top 5)
+ *   6. 前端 / 数据可视化 (Top 5)
+ *   7. 值得精读的论文 (Top 5)
+ *
+ * Output: ~/AI-Daily/{YYYY-MM}/{YYYY-MM-DD}.md + .txt
  *
  * Usage:
  *   node ai-daily.mjs              # today
  *   node ai-daily.mjs 2026-03-21   # specific date
- *   node ai-daily.mjs --force      # ignore dedup, re-fetch today
+ *   node ai-daily.mjs --force      # re-fetch even if exists
  */
 
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+
 
 const ICLOUD_BASE = join(
   homedir(),
@@ -22,60 +31,91 @@ const ICLOUD_BASE = join(
 );
 const FORCE = process.argv.includes("--force");
 
-const AI_KEYWORDS = [
-  "ai",
-  "artificial intelligence",
-  "machine learning",
-  "deep learning",
-  "llm",
-  "gpt",
-  "claude",
-  "gemini",
-  "transformer",
-  "neural",
-  "openai",
-  "anthropic",
-  "diffusion",
-  "embedding",
-  "rag",
-  "agent",
-  "fine-tun",
-  "langchain",
-  "vector database",
-  "prompt",
-  "multimodal",
-  "reasoning",
-  "inference",
-  "model",
-  "nlp",
-  "computer vision",
-  "generative",
-  "copilot",
-  "stable diffusion",
-  "midjourney",
-  "hugging face",
-  "lora",
-  "rlhf",
-  "mcp",
-  "ai tool",
+// ─── Keyword Sets ──────────────────────────────────────────
+
+const KW_AI_PRODUCT = [
+  "openai", "anthropic", "claude ai", "claude code", "claude 4",
+  "gpt-4", "gpt-5", "gpt4", "gpt5", "chatgpt",
+  "gemini", "google ai", "meta ai", "meta llama",
+  "mistral", "cohere", "deepseek", "qwen",
+  "copilot", "perplexity", "midjourney",
+  "stable diffusion", "sora",
+  "ai model", "ai launch", "ai release", "ai announce",
+  "llm release", "llm launch",
 ];
 
-function isAIRelated(text) {
-  const lower = text.toLowerCase();
-  return AI_KEYWORDS.some((kw) => lower.includes(kw));
-}
+const KW_AI_TOOLS = [
+  "ai tool", "ai sdk", "ai framework", "ai api", "ai platform",
+  "llm tool", "llm framework", "llm api", "llm sdk",
+  "langchain", "llamaindex", "autogen", "crewai", "dspy",
+  "vllm", "ollama", "lmstudio", "jan.ai",
+  "cursor", "windsurf", "aider", "continue.dev",
+  "vercel ai", "ai gateway", "ai proxy",
+  "mcp", "tool use", "function calling",
+  "fine-tun", "lora", "qlora", "unsloth",
+  "inference", "serving", "deployment",
+  "ai code", "ai dev", "ai engineer",
+  "vector database", "embedding", "semantic search",
+];
+
+const KW_AGENT_RAG = [
+  "agent", "agentic", "multi-agent", "agent framework",
+  "rag", "retrieval augmented", "retrieval-augmented",
+  "nl2sql", "text-to-sql", "text2sql",
+  "prompt engineer", "prompt template", "prompt chain",
+  "chain of thought", "cot", "react agent",
+  "tool use", "function call", "planning",
+  "memory", "context window", "long context",
+  "knowledge graph", "graph rag",
+  "evaluation", "eval", "benchmark",
+];
+
+const KW_FRONTEND_DATAVIZ = [
+  "react", "next.js", "nextjs", "vue", "svelte", "solid",
+  "typescript", "javascript", "node.js", "nodejs", "deno", "bun",
+  "tailwind", "css", "web component",
+  "vite", "turbopack", "rspack", "webpack",
+  "monorepo", "micro frontend",
+  "d3", "echarts", "antv", "g2", "g6", "l7", "s2",
+  "observable", "plotly", "chart.js", "recharts", "nivo",
+  "deck.gl", "mapbox", "react-flow", "xyflow",
+  "three.js", "webgl", "webgpu", "canvas",
+  "data viz", "visualization", "dashboard",
+  "monaco editor", "codemirror",
+];
+
+// ─── Helpers ───────────────────────────────────────────────
 
 function getTargetDate() {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   if (args[0]) return args[0];
-  const now = new Date();
-  return now.toISOString().split("T")[0];
+  return new Date().toISOString().split("T")[0];
+}
+
+// Negative keywords — stories matching these are excluded from all sections
+const KW_EXCLUDE = [
+  "cell phone ban", "phone ban", "school ban",
+  "sports", "football", "basketball", "soccer",
+  "cooking", "recipe", "gardening",
+  "real estate", "mortgage", "housing market",
+  "crypto scam", "ponzi",
+];
+
+function matchKeywords(text, keywords) {
+  const lower = text.toLowerCase();
+  if (KW_EXCLUDE.some((kw) => lower.includes(kw))) return false;
+  return keywords.some((kw) => lower.includes(kw));
+}
+
+function matchScore(text, keywords) {
+  const lower = text.toLowerCase();
+  return keywords.filter((kw) => lower.includes(kw)).length;
 }
 
 async function fetchJSON(url, options = {}) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
     const res = await fetch(url, { signal: controller.signal, ...options });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -89,7 +129,7 @@ async function fetchJSON(url, options = {}) {
 async function fetchText(url) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
     const res = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -110,87 +150,138 @@ async function fetchHackerNews() {
   );
   if (!topIds) return [];
 
-  const top60 = topIds.slice(0, 60);
+  const top100 = topIds.slice(0, 100);
   const stories = await Promise.all(
-    top60.map((id) =>
+    top100.map((id) =>
       fetchJSON(`https://hacker-news.firebaseio.com/v0/item/${id}.json`)
     )
   );
 
-  const aiStories = stories
-    .filter((s) => s && s.title && isAIRelated(s.title))
-    .sort((a, b) => (b.score || 0) - (a.score || 0))
-    .slice(0, 15)
+  return stories
+    .filter((s) => s && s.title && (s.score || 0) >= 30)
     .map((s) => ({
       title: s.title,
       url: s.url || `https://news.ycombinator.com/item?id=${s.id}`,
       score: s.score || 0,
       comments: s.descendants || 0,
       hn_url: `https://news.ycombinator.com/item?id=${s.id}`,
+      text: s.title + " " + (s.url || ""),
     }));
-
-  console.log(`  Found ${aiStories.length} AI-related stories`);
-  return aiStories;
 }
 
-// ─── GitHub Trending ───────────────────────────────────────
+// ─── GitHub: New & Trending Repos ──────────────────────────
 
-async function fetchGitHubTrending() {
-  console.log("🐙 Fetching GitHub Trending...");
+async function fetchGitHubRepos(query, label) {
+  const data = await fetchJSON(
+    `https://api.github.com/search/repositories?${query}`,
+    { headers: { Accept: "application/vnd.github.v3+json" } }
+  );
+
+  if (!data?.items) return [];
+
+  return data.items.map((repo) => ({
+    name: repo.full_name,
+    description: repo.description || "",
+    stars: repo.stargazers_count,
+    language: repo.language || "N/A",
+    url: repo.html_url,
+    created: repo.created_at?.split("T")[0] || "",
+    text: `${repo.full_name} ${repo.description || ""} ${repo.topics?.join(" ") || ""}`,
+    source: label,
+  }));
+}
+
+async function fetchGitHub() {
+  console.log("🐙 Fetching GitHub...");
 
   const today = new Date();
-  const weekAgo = new Date(today - 7 * 24 * 60 * 60 * 1000);
-  const since = weekAgo.toISOString().split("T")[0];
+  const daysAgo = (n) => {
+    const d = new Date(today - n * 24 * 60 * 60 * 1000);
+    return d.toISOString().split("T")[0];
+  };
 
+  // 6 queries max to stay under GitHub rate limit (10 req/min unauthenticated)
   const queries = [
-    `q=topic:artificial-intelligence+pushed:>${since}&sort=stars&order=desc&per_page=10`,
-    `q=topic:llm+pushed:>${since}&sort=stars&order=desc&per_page=10`,
-    `q=topic:machine-learning+pushed:>${since}&sort=stars&order=desc&per_page=10`,
+    // AI tools & LLM (active this week)
+    `q=topic:llm+pushed:>${daysAgo(7)}&sort=stars&order=desc&per_page=15`,
+    // New AI repos (created recently, growing fast)
+    `q=topic:artificial-intelligence+created:>${daysAgo(30)}+stars:>50&sort=stars&order=desc&per_page=15`,
+    // Agent
+    `q=topic:ai-agent+pushed:>${daysAgo(14)}&sort=stars&order=desc&per_page=10`,
+    // Data Viz
+    `q=topic:data-visualization+pushed:>${daysAgo(14)}&sort=stars&order=desc&per_page=10`,
   ];
 
   const seen = new Set();
-  const repos = [];
+  const allRepos = [];
 
   for (const query of queries) {
-    const data = await fetchJSON(
-      `https://api.github.com/search/repositories?${query}`,
-      { headers: { Accept: "application/vnd.github.v3+json" } }
-    );
-
-    if (data?.items) {
-      for (const repo of data.items) {
-        if (seen.has(repo.full_name)) continue;
-        seen.add(repo.full_name);
-        repos.push({
-          name: repo.full_name,
-          description: repo.description || "",
-          stars: repo.stargazers_count,
-          language: repo.language || "N/A",
-          url: repo.html_url,
-        });
-      }
+    const repos = await fetchGitHubRepos(query, "github");
+    for (const repo of repos) {
+      if (seen.has(repo.name)) continue;
+      seen.add(repo.name);
+      allRepos.push(repo);
     }
+    // Rate limit: GitHub allows 10 req/min unauthenticated
+    await new Promise((r) => setTimeout(r, 1500));
   }
 
-  const sorted = repos.sort((a, b) => b.stars - a.stars).slice(0, 15);
-  console.log(`  Found ${sorted.length} trending AI repos`);
-  return sorted;
+  console.log(`  Found ${allRepos.length} repos`);
+  return allRepos;
+}
+
+// ─── GitHub: AI Tools Top 5 (fixed repo list, ecosystem landscape) ─
+
+async function fetchAIToolsTop() {
+  console.log("🏆 Fetching AI Tools Top 5...");
+
+  // Pinned repos per category — the actual ecosystem leaders
+  const repos = [
+    { repo: "langchain-ai/langchain", category: "AI Framework" },
+    { repo: "ollama/ollama", category: "本地推理" },
+    { repo: "getcursor/cursor", category: "AI Coding" },
+    { repo: "langgenius/dify", category: "AI Platform" },
+    { repo: "qdrant/qdrant", category: "Vector DB" },
+  ];
+
+  const tools = [];
+  for (const { repo, category } of repos) {
+    const data = await fetchJSON(
+      `https://api.github.com/repos/${repo}`,
+      { headers: { Accept: "application/vnd.github.v3+json" } }
+    );
+    if (data && data.full_name) {
+      tools.push({
+        name: data.full_name,
+        description: (data.description || "").slice(0, 80),
+        stars: data.stargazers_count,
+        language: data.language || "N/A",
+        url: data.html_url,
+        category,
+        updated: data.pushed_at?.split("T")[0] || "",
+      });
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+
+  console.log(`  Found ${tools.length} top tools`);
+  return tools;
 }
 
 // ─── ArXiv ─────────────────────────────────────────────────
 
 async function fetchArxiv() {
-  console.log("📄 Fetching ArXiv papers...");
+  console.log("📄 Fetching ArXiv...");
 
   const categories = ["cs.AI", "cs.LG", "cs.CL"];
   const query = categories.map((c) => `cat:${c}`).join("+OR+");
-  const url = `https://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=15`;
+  const url = `https://export.arxiv.org/api/query?search_query=${query}&sortBy=submittedDate&sortOrder=descending&max_results=30`;
 
   const xml = await fetchText(url);
   if (!xml) return [];
 
   const entries = xml.split("<entry>").slice(1);
-  const papers = entries.map((entry) => {
+  return entries.map((entry) => {
     const getTag = (tag) => {
       const match = entry.match(
         new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)
@@ -199,7 +290,7 @@ async function fetchArxiv() {
     };
 
     const title = getTag("title").replace(/\s+/g, " ");
-    const summary = getTag("summary").replace(/\s+/g, " ").slice(0, 200);
+    const summary = getTag("summary").replace(/\s+/g, " ").slice(0, 300);
     const published = getTag("published").split("T")[0];
 
     const linkMatch = entry.match(
@@ -213,152 +304,359 @@ async function fetchArxiv() {
       if (authors.length < 3) authors.push(m[1]);
     }
 
-    const categoryMatches = entry.matchAll(/term="([^"]+)"/g);
-    const cats = [];
-    for (const m of categoryMatches) {
-      if (m[1].startsWith("cs.")) cats.push(m[1]);
-    }
-
-    return { title, summary, authors, link, published, categories: cats };
+    return {
+      title,
+      summary,
+      authors,
+      link,
+      published,
+      text: title + " " + summary,
+    };
   });
+}
 
-  console.log(`  Found ${papers.length} recent papers`);
+// ─── Hugging Face Daily Papers ─────────────────────────────
+
+async function fetchHFPapers() {
+  console.log("🤗 Fetching Hugging Face Daily Papers...");
+
+  // Try daily_papers first, then flat /papers as fallback
+  let data = await fetchJSON("https://huggingface.co/api/daily_papers");
+
+  if (data && Array.isArray(data) && data.length > 0) {
+    // Wrapped format: { paper: { ... }, submittedBy, ... }
+    const papers = data
+      .filter((p) => p.paper && (p.paper.upvotes || 0) >= 3)
+      .slice(0, 15)
+      .map((p) => ({
+        title: p.paper.title || "",
+        summary: (p.paper.ai_summary || p.paper.summary || "").replace(/\s+/g, " ").slice(0, 300),
+        link: `https://huggingface.co/papers/${p.paper.id}`,
+        upvotes: p.paper.upvotes || 0,
+        published: p.paper.publishedAt?.split("T")[0] || p.publishedAt?.split("T")[0] || "",
+        authors: p.paper.authors?.slice(0, 3).map((a) => a.name || a.fullname || a.user?.fullname || a._id || "") || [],
+        text: (p.paper.title || "") + " " + (p.paper.summary || ""),
+      }));
+    console.log(`  Found ${papers.length} papers from /daily_papers (upvotes ≥ 3)`);
+    return papers;
+  }
+
+  // Fallback: flat /papers endpoint
+  data = await fetchJSON("https://huggingface.co/api/papers");
+  if (!data || !Array.isArray(data)) return [];
+
+  const papers = data
+    .filter((p) => (p.upvotes || 0) >= 3)
+    .slice(0, 15)
+    .map((p) => ({
+      title: p.title || "",
+      summary: (p.ai_summary || p.summary || "").replace(/\s+/g, " ").slice(0, 300),
+      link: `https://huggingface.co/papers/${p.id}`,
+      upvotes: p.upvotes || 0,
+      published: p.publishedAt?.split("T")[0] || "",
+      authors: p.authors?.slice(0, 3).map((a) => a.name || a.fullname || a._id || "") || [],
+      text: (p.title || "") + " " + (p.summary || ""),
+    }));
+
+  console.log(`  Found ${papers.length} papers from /papers (upvotes ≥ 3)`);
   return papers;
 }
 
-// ─── Output: Markdown ──────────────────────────────────────
+// ─── Categorize & Build Sections ───────────────────────────
 
-function generateMarkdown(date, hn, github, arxiv) {
+function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop) {
+  const usedHN = new Set();
+  const usedGH = new Set();
+
+  // Helper: pick top N from list by score, mark as used
+  // minMatches: require at least N keyword matches (default 1)
+  function pickHN(keywords, n, scoreThreshold = 30, minMatches = 1) {
+    return hnStories
+      .filter((s) => !usedHN.has(s.url) && matchScore(s.text, keywords) >= minMatches && s.score >= scoreThreshold)
+      .sort((a, b) => {
+        const sa = matchScore(a.text, keywords);
+        const sb = matchScore(b.text, keywords);
+        return sb - sa || b.score - a.score;
+      })
+      .slice(0, n)
+      .map((s) => { usedHN.add(s.url); return s; });
+  }
+
+  function pickGH(keywords, n, preferNew = false) {
+    let repos = githubRepos
+      .filter((r) => !usedGH.has(r.name) && matchKeywords(r.text, keywords));
+
+    if (preferNew) {
+      const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+        .toISOString().split("T")[0];
+      const newRepos = repos.filter((r) => r.created > cutoff);
+      if (newRepos.length >= n) repos = newRepos;
+    }
+
+    return repos
+      .sort((a, b) => {
+        const sa = matchScore(a.text, keywords);
+        const sb = matchScore(b.text, keywords);
+        return sb - sa || b.stars - a.stars;
+      })
+      .slice(0, n)
+      .map((r) => { usedGH.add(r.name); return r; });
+  }
+
+  // ── Section 1: AI 产品与发布 (Top 5) ──
+  const sec1_hn = pickHN(KW_AI_PRODUCT, 5, 50);
+
+  // ── Section 2: AI 工程与工具 (Top 10) ──
+  const sec2_gh = pickGH(KW_AI_TOOLS, 7, true);
+  const sec2_hn = pickHN(KW_AI_TOOLS, 3);
+
+  // ── Section 3: AI 工具生态 Top 5 ──
+  const sec3_top = aiToolsTop;
+
+  // ── Section 4: Agent / RAG / LLM 应用 (Top 5) ──
+  const sec4_hn = pickHN(KW_AGENT_RAG, 3);
+  const sec4_arxiv = arxivPapers
+    .filter((p) => matchKeywords(p.text, KW_AGENT_RAG))
+    .slice(0, 2);
+
+  // ── Section 5: 开源热点 (Top 5) ──
+  // Repos not yet picked, prefer new (created < 90 days), sort by stars
+  const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    .toISOString().split("T")[0];
+  const sec5_gh_hot = githubRepos
+    .filter((r) => !usedGH.has(r.name) && r.created > cutoff90)
+    .sort((a, b) => b.stars - a.stars)
+    .slice(0, 5)
+    .map((r) => { usedGH.add(r.name); return r; });
+
+  // ── Section 6: 前端 / 数据可视化 (Top 5) ──
+  // HN requires 2+ keyword matches to avoid false positives like "No AI in Node.js"
+  const sec6_gh = pickGH(KW_FRONTEND_DATAVIZ, 3, true);
+  const sec6_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
+
+  // ── Section 7: 值得精读的论文 (Top 5) ──
+  const sec7_hf = hfPapers.slice(0, 5);
+
+  return { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf };
+}
+
+// ─── Markdown Output ───────────────────────────────────────
+
+function mdHNList(items) {
+  const l = [];
+  for (const s of items) {
+    l.push(`- **[${s.title}](${s.url})**`);
+    l.push(`  ⬆ ${s.score} pts | 💬 ${s.comments} 评论 | [讨论](${s.hn_url})`);
+    l.push("");
+  }
+  return l;
+}
+
+function mdGHList(items, showAge = false) {
+  const l = [];
+  for (const r of items) {
+    const desc = (r.description).slice(0, 80);
+    const age = showAge && r.created ? ` | 创建于 ${r.created}` : "";
+    l.push(`- **[${r.name}](${r.url})** ⭐ ${r.stars.toLocaleString()} [${r.language}]${age}`);
+    l.push(`  ${desc}`);
+    l.push("");
+  }
+  return l;
+}
+
+function generateMarkdown(date, sections) {
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
   const lines = [];
 
-  lines.push(`# AI Daily Digest — ${date}`);
+  lines.push(`# 技术日报 — ${date}`);
   lines.push("");
-  lines.push(`> Auto-generated at ${new Date().toISOString()}`);
+  lines.push(`> 自动生成于 ${new Date().toISOString()}`);
   lines.push("");
 
-  lines.push("## 📰 Hacker News — AI Hot Stories");
+  // 1. AI 产品与发布
+  lines.push("## 🤖 AI 产品与发布");
   lines.push("");
-  if (hn.length === 0) {
-    lines.push("_No AI-related stories found today._");
+  if (sec1_hn.length === 0) lines.push("_今日暂无重大 AI 产品动态_");
+  else lines.push(...mdHNList(sec1_hn));
+  lines.push("");
+
+  // 2. AI 工程与工具
+  lines.push("## 🔧 AI 工程与工具（重点）");
+  lines.push("");
+  if (sec2_gh.length === 0 && sec2_hn.length === 0) lines.push("_今日暂无 AI 工具更新_");
+  else { lines.push(...mdGHList(sec2_gh)); lines.push(...mdHNList(sec2_hn)); }
+  lines.push("");
+
+  // 3. AI 工具生态 Top 5
+  lines.push("## 🏆 AI 工具生态 Top 5");
+  lines.push("");
+  if (sec3_top.length === 0) {
+    lines.push("_未能获取工具排行_");
   } else {
-    for (const s of hn) {
-      lines.push(
-        `- **[${s.title}](${s.url})** — ⬆ ${s.score} | 💬 ${s.comments} ([discussion](${s.hn_url}))`
-      );
+    lines.push("| 分类 | 项目 | 简介 | ⭐ Stars | 最近更新 |");
+    lines.push("|------|------|------|----------|----------|");
+    for (const t of sec3_top) {
+      const desc = (t.description).slice(0, 40);
+      lines.push(`| ${t.category} | [${t.name}](${t.url}) | ${desc} | ${t.stars.toLocaleString()} | ${t.updated} |`);
     }
   }
   lines.push("");
 
-  lines.push("## 🐙 GitHub Trending — AI/ML Repos");
+  // 4. Agent / RAG / LLM 应用
+  lines.push("## 🧠 Agent / RAG / LLM 应用");
   lines.push("");
-  if (github.length === 0) {
-    lines.push("_No trending AI repos found today._");
+  if (sec4_hn.length === 0 && sec4_arxiv.length === 0) {
+    lines.push("_今日暂无相关更新_");
   } else {
-    lines.push("| Repo | Description | ⭐ Stars | Language |");
-    lines.push("|------|-------------|----------|----------|");
-    for (const r of github) {
-      const desc =
-        r.description.length > 60
-          ? r.description.slice(0, 60) + "..."
-          : r.description;
-      lines.push(
-        `| [${r.name}](${r.url}) | ${desc} | ${r.stars.toLocaleString()} | ${r.language} |`
-      );
+    lines.push(...mdHNList(sec4_hn));
+    for (const p of sec4_arxiv) {
+      const authStr = p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
+      lines.push(`- **[${p.title}](${p.link})**`);
+      lines.push(`  ${authStr} | ${p.published}`);
+      lines.push(`  ${p.summary.slice(0, 150)}...`);
+      lines.push("");
     }
   }
   lines.push("");
 
-  lines.push("## 📄 ArXiv — Latest AI/ML Papers");
+  // 5. 开源热点
+  lines.push("## 🔥 开源热点");
   lines.push("");
-  if (arxiv.length === 0) {
-    lines.push("_No papers fetched today._");
+  if (sec5_gh_hot.length === 0) lines.push("_今日暂无新兴开源项目_");
+  else lines.push(...mdGHList(sec5_gh_hot, true));
+  lines.push("");
+
+  // 6. 前端 / 数据可视化
+  lines.push("## 📊 前端 / 数据可视化");
+  lines.push("");
+  if (sec6_gh.length === 0 && sec6_hn.length === 0) lines.push("_今日暂无相关更新_");
+  else { lines.push(...mdGHList(sec6_gh)); lines.push(...mdHNList(sec6_hn)); }
+  lines.push("");
+
+  // 7. 值得精读的论文
+  lines.push("## 📄 值得精读的论文");
+  lines.push("");
+  if (sec7_hf.length === 0) {
+    lines.push("_今日暂无推荐论文_");
   } else {
-    for (const p of arxiv) {
-      const authStr =
-        p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
-      lines.push(`### [${p.title}](${p.link})`);
-      lines.push("");
-      lines.push(
-        `> ${authStr} | ${p.published} | ${p.categories.join(", ")}`
-      );
-      lines.push("");
-      lines.push(`${p.summary}...`);
+    for (const p of sec7_hf) {
+      const authStr = p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
+      lines.push(`- **[${p.title}](${p.link})** 👍 ${p.upvotes}`);
+      lines.push(`  ${authStr}`);
+      lines.push(`  ${p.summary.slice(0, 150)}...`);
       lines.push("");
     }
   }
 
+  const total = Object.values(sections).flat().length;
   lines.push("---");
   lines.push("");
-  lines.push(
-    `📊 **Today**: ${hn.length} HN stories | ${github.length} GitHub repos | ${arxiv.length} ArXiv papers`
-  );
+  lines.push(`📊 **今日统计**：共 ${total} 条`);
 
   return lines.join("\n");
 }
 
-// ─── Output: Plain Text ───────────────────────────────────
+// ─── Plain Text Output ────────────────────────────────────
 
-function generatePlainText(date, hn, github, arxiv) {
+function generatePlainText(date, sections) {
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
   const lines = [];
   const sep = "─".repeat(60);
 
-  lines.push(`AI Daily Digest — ${date}`);
+  lines.push(`技术日报 — ${date}`);
   lines.push(sep);
   lines.push("");
 
-  lines.push("[Hacker News — AI Hot Stories]");
-  lines.push("");
-  if (hn.length === 0) {
-    lines.push("  No AI-related stories found today.");
-  } else {
-    for (let i = 0; i < hn.length; i++) {
-      const s = hn[i];
+  const txtHN = (items, label) => {
+    lines.push(`[${label}]`);
+    lines.push("");
+    if (items.length === 0) { lines.push("  今日暂无"); }
+    else items.forEach((s, i) => {
       lines.push(`  ${i + 1}. ${s.title}`);
-      lines.push(`     ⬆ ${s.score} pts | 💬 ${s.comments} comments`);
+      lines.push(`     ⬆ ${s.score} pts | 💬 ${s.comments} 评论`);
       lines.push(`     ${s.url}`);
       lines.push("");
-    }
-  }
-  lines.push("");
+    });
+    lines.push("");
+  };
 
-  lines.push("[GitHub Trending — AI/ML Repos]");
-  lines.push("");
-  if (github.length === 0) {
-    lines.push("  No trending AI repos found today.");
-  } else {
-    for (let i = 0; i < github.length; i++) {
-      const r = github[i];
+  const txtGH = (items) => {
+    items.forEach((r, i) => {
       lines.push(`  ${i + 1}. ${r.name}  ⭐ ${r.stars.toLocaleString()}  [${r.language}]`);
-      if (r.description) {
-        lines.push(`     ${r.description.slice(0, 80)}`);
-      }
+      const desc = r.description;
+      if (desc) lines.push(`     ${desc.slice(0, 80)}`);
       lines.push(`     ${r.url}`);
       lines.push("");
-    }
-  }
+    });
+  };
+
+  // 1
+  txtHN(sec1_hn, "🤖 AI 产品与发布");
+
+  // 2
+  lines.push("[🔧 AI 工程与工具（重点）]");
+  lines.push("");
+  if (sec2_gh.length === 0 && sec2_hn.length === 0) lines.push("  今日暂无");
+  else { txtGH(sec2_gh); sec2_hn.forEach((s, i) => {
+    lines.push(`  ${sec2_gh.length + i + 1}. ${s.title}`);
+    lines.push(`     ⬆ ${s.score} pts`);
+    lines.push(`     ${s.url}`);
+    lines.push("");
+  }); }
   lines.push("");
 
-  lines.push("[ArXiv — Latest AI/ML Papers]");
+  // 3
+  lines.push("[🏆 AI 工具生态 Top 5]");
   lines.push("");
-  if (arxiv.length === 0) {
-    lines.push("  No papers fetched today.");
-  } else {
-    for (let i = 0; i < arxiv.length; i++) {
-      const p = arxiv[i];
-      const authStr =
-        p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
-      lines.push(`  ${i + 1}. ${p.title}`);
-      lines.push(`     ${authStr} | ${p.published}`);
-      lines.push(`     ${p.summary}...`);
-      if (p.link) lines.push(`     ${p.link}`);
-      lines.push("");
-    }
-  }
+  if (sec3_top.length === 0) lines.push("  未能获取");
+  else sec3_top.forEach((t, i) => {
+    lines.push(`  ${i + 1}. [${t.category}] ${t.name}  ⭐ ${t.stars.toLocaleString()}  更新:${t.updated}`);
+    const desc = t.description;
+    if (desc) lines.push(`     ${desc.slice(0, 60)}`);
+    lines.push(`     ${t.url}`);
+    lines.push("");
+  });
+  lines.push("");
 
+  // 4
+  lines.push("[🧠 Agent / RAG / LLM 应用]");
+  lines.push("");
+  let idx = 1;
+  sec4_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
+  sec4_arxiv.forEach((p) => { lines.push(`  ${idx++}. ${p.title}`); lines.push(`     ${p.summary.slice(0, 120)}...`); lines.push(`     ${p.link}`); lines.push(""); });
+  if (idx === 1) lines.push("  今日暂无");
+  lines.push("");
+
+  // 5
+  lines.push("[🔥 开源热点]");
+  lines.push("");
+  if (sec5_gh_hot.length === 0) lines.push("  今日暂无");
+  else txtGH(sec5_gh_hot);
+  lines.push("");
+
+  // 6
+  lines.push("[📊 前端 / 数据可视化]");
+  lines.push("");
+  idx = 1;
+  sec6_gh.forEach((r) => { const d = r.description; lines.push(`  ${idx++}. ${r.name}  ⭐ ${r.stars.toLocaleString()}  [${r.language}]`); if (d) lines.push(`     ${d.slice(0, 80)}`); lines.push(`     ${r.url}`); lines.push(""); });
+  sec6_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
+  if (idx === 1) lines.push("  今日暂无");
+  lines.push("");
+
+  // 7
+  lines.push("[📄 值得精读的论文]");
+  lines.push("");
+  if (sec7_hf.length === 0) lines.push("  今日暂无");
+  else sec7_hf.forEach((p, i) => {
+    lines.push(`  ${i + 1}. ${p.title}  👍 ${p.upvotes}`);
+    lines.push(`     ${p.summary.slice(0, 120)}...`);
+    lines.push(`     ${p.link}`);
+    lines.push("");
+  });
+
+  const total = Object.values(sections).flat().length;
   lines.push(sep);
-  lines.push(
-    `Today: ${hn.length} HN stories | ${github.length} GitHub repos | ${arxiv.length} ArXiv papers`
-  );
+  lines.push(`今日统计：共 ${total} 条`);
 
   return lines.join("\n");
 }
@@ -377,32 +675,39 @@ async function main() {
   const mdPath = join(monthDir, `${date}.md`);
   const txtPath = join(monthDir, `${date}.txt`);
 
-  // Dedup: skip if already fetched (multi-Mac safety)
   if (existsSync(mdPath) && !FORCE) {
-    console.log(`⏭  ${date} already exists, skipping. Use --force to re-fetch.`);
+    console.log(`⏭  ${date} 已存在，跳过。使用 --force 重新抓取。`);
     process.exit(0);
   }
 
-  console.log(`\n🤖 AI Daily Digest — ${date}\n`);
+  console.log(`\n🤖 技术日报 — ${date}\n`);
 
-  const [hn, github, arxiv] = await Promise.all([
+  // HN, ArXiv, HF can run in parallel (different domains)
+  // GitHub Top 5 and trending run sequentially (same domain, rate limited)
+  const [hnStories, arxivPapers, hfPapers] = await Promise.all([
     fetchHackerNews(),
-    fetchGitHubTrending(),
     fetchArxiv(),
+    fetchHFPapers(),
   ]);
 
-  const md = generateMarkdown(date, hn, github, arxiv);
-  const txt = generatePlainText(date, hn, github, arxiv);
+  const aiToolsTop = await fetchAIToolsTop();
+  const githubRepos = await fetchGitHub();
+
+  console.log(`\n📊 原始数据: HN ${hnStories.length} | GitHub ${githubRepos.length} | ArXiv ${arxivPapers.length} | HF ${hfPapers.length} | Top ${aiToolsTop.length}`);
+
+  const sections = buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop);
+
+  const md = generateMarkdown(date, sections);
+  const txt = generatePlainText(date, sections);
 
   writeFileSync(mdPath, md, "utf-8");
   writeFileSync(txtPath, txt, "utf-8");
 
-  console.log(`\n✅ Saved to:`);
+  const total = Object.values(sections).flat().length;
+  console.log(`\n✅ 已保存:`);
   console.log(`   ${mdPath}`);
   console.log(`   ${txtPath}`);
-  console.log(
-    `📊 ${hn.length} HN stories | ${github.length} GitHub repos | ${arxiv.length} ArXiv papers\n`
-  );
+  console.log(`📊 共 ${total} 条资讯\n`);
 }
 
 main().catch((e) => {
