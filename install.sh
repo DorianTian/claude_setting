@@ -130,8 +130,28 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
   echo "▶ Config files..."
   [[ "$INSTALL_SETTINGS" == "true" ]] && safe_install "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json" "settings.json"
   if [[ "$INSTALL_STATUSLINE" == "true" ]]; then
-    safe_install "$SCRIPT_DIR/statusline.sh" "$CLAUDE_DIR/statusline.sh" "statusline.sh"
-    chmod +x "$CLAUDE_DIR/statusline.sh"
+    # CCometixLine (Rust) — requires cargo
+    if command -v ccometixline &>/dev/null; then
+      echo "  ✓ ccometixline already installed"
+    else
+      echo "  ▶ Installing CCometixLine..."
+      if ! command -v cargo &>/dev/null; then
+        echo "    Installing Rust..."
+        if command -v brew &>/dev/null; then
+          brew install rust
+        else
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source "$HOME/.cargo/env"
+        fi
+      fi
+      if command -v cargo &>/dev/null; then
+        git clone --depth 1 https://github.com/Haleclipse/CCometixLine.git /tmp/CCometixLine 2>/dev/null
+        cargo install --path /tmp/CCometixLine 2>/dev/null && echo "  ✓ ccometixline installed" || echo "  ✗ ccometixline install failed"
+        rm -rf /tmp/CCometixLine
+      else
+        echo "  ✗ cargo not found, cannot install ccometixline"
+      fi
+    fi
   fi
   if [[ "$INSTALL_CLAUDE_MD" == "true" ]]; then
     ICLOUD_CLAUDE_MD="$ICLOUD_DIR/claude-memory/CLAUDE.md"
@@ -157,10 +177,7 @@ if [[ "$INSTALL_STATUSLINE" == "true" ]]; then
   echo "▶ Dependencies..."
   command -v jq &>/dev/null && echo "  ✓ jq $(jq --version 2>&1)" || echo "  ✗ jq not found — brew install jq"
   command -v git &>/dev/null && echo "  ✓ git $(git --version | awk '{print $3}')" || echo "  ✗ git not found"
-
-  echo ""
-  echo "▶ Testing statusline..."
-  TEST_OUTPUT=$(echo '{"model":{"display_name":"Test"},"context_window":{"used_percentage":25,"context_window_size":1000000,"current_usage":{"input_tokens":1000,"cache_read_input_tokens":500}},"cost":{"total_cost_usd":0.5,"total_lines_added":10,"total_lines_removed":3,"total_duration_ms":60000},"workspace":{"current_dir":"'"$HOME"'","project_dir":""}}' | "$CLAUDE_DIR/statusline.sh" 2>&1) && echo "  ✓ Statusline works" || echo "  ✗ Statusline failed: $TEST_OUTPUT"
+  command -v ccometixline &>/dev/null && echo "  ✓ ccometixline $(ccometixline --version 2>&1)" || echo "  ✗ ccometixline not found"
 fi
 
 # ── iCloud helpers ──
