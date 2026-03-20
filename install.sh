@@ -237,11 +237,13 @@ if [[ "$KNOWLEDGE" == "true" ]]; then
       echo "  = Knowledge (already symlinked)"
     elif [[ -d "$HOME/Knowledge" ]]; then
       mkdir -p "$ICLOUD_KNOWLEDGE"
-      echo "  ↻ Moving to iCloud..."
-      cp -r "$HOME/Knowledge/." "$ICLOUD_KNOWLEDGE/"
+      echo "  ↻ Merging (iCloud wins on conflicts)..."
+      # 1. 本地有、iCloud 没有的文件 → 补到 iCloud（-n = no overwrite）
+      cp -rn "$HOME/Knowledge/." "$ICLOUD_KNOWLEDGE/" 2>/dev/null || true
+      # 2. 删除本地目录，建 symlink 指向 iCloud（iCloud 内容为准）
       rm -rf "$HOME/Knowledge"
       ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
-      echo "  ✓ Knowledge → iCloud Drive/Knowledge"
+      echo "  ✓ Knowledge → iCloud Drive/Knowledge (iCloud is source of truth)"
     else
       if [[ -d "$ICLOUD_KNOWLEDGE" ]]; then
         ln -s "$ICLOUD_KNOWLEDGE" "$HOME/Knowledge"
