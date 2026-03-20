@@ -145,9 +145,7 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
         fi
       fi
       if command -v cargo &>/dev/null; then
-        git clone --depth 1 https://github.com/Haleclipse/CCometixLine.git /tmp/CCometixLine 2>/dev/null
-        cargo install --path /tmp/CCometixLine 2>/dev/null && echo "  ✓ ccometixline installed" || echo "  ✗ ccometixline install failed"
-        rm -rf /tmp/CCometixLine
+        cargo install --git https://github.com/Haleclipse/CCometixLine.git 2>/dev/null && echo "  ✓ ccometixline installed" || echo "  ✗ ccometixline install failed"
       else
         echo "  ✗ cargo not found, cannot install ccometixline"
       fi
