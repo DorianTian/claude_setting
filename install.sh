@@ -20,6 +20,7 @@ CLAUDE_DIR="$HOME/.claude"
 INSTALL_SETTINGS=false
 INSTALL_STATUSLINE=false
 INSTALL_CLAUDE_MD=false
+INSTALL_MCP=false
 KNOWLEDGE=false
 AI_DAILY=false
 LINK=false
@@ -30,7 +31,8 @@ if [[ $# -eq 0 ]]; then
 else
   for arg in "$@"; do
     case "$arg" in
-      --all) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
+      --all) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true; INSTALL_MCP=true ;;
+      --mcp) INSTALL_MCP=true ;;
       --statusline) INSTALL_STATUSLINE=true ;;
       --knowledge) KNOWLEDGE=true ;;
       --ai-daily) AI_DAILY=true ;;
@@ -40,8 +42,9 @@ else
         echo ""
         echo "  Config files:"
         echo "    (none)            Interactive mode"
-        echo "    --all             Install all config files (settings + statusline + CLAUDE.md)"
+        echo "    --all             Install all config files (settings + statusline + CLAUDE.md + MCP)"
         echo "    --statusline      Install statusline only"
+        echo "    --mcp             Configure MCP servers (database connections)"
         echo ""
         echo "  iCloud sync (symlink, real-time):"
         echo "    --knowledge       Symlink Knowledge to iCloud"
@@ -68,7 +71,7 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo "    1) settings.json       (deny rules + hooks + statusline + env)"
   echo "    2) statusline.sh       (dir + branch / model + context + cost)"
   echo "    3) CLAUDE.md           (global instructions)"
-  echo "    4) All config files    (1 + 2 + 3)"
+  echo "    4) All config files    (1 + 2 + 3 + 8)"
   echo ""
   echo "  iCloud sync (symlink, real-time):"
   echo "    5) Sync Knowledge      → iCloud"
@@ -76,7 +79,8 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo ""
   echo "  Other:"
   echo "    7) Register CLI        (claude-config command)"
-  echo "    0) Full setup          (all configs + sync Knowledge & AI-Daily + CLI)"
+  echo "    8) MCP servers         (database connections)"
+  echo "    0) Full setup          (all configs + sync + CLI + MCP)"
   echo ""
   printf "  Enter choices (e.g. 1 2 5, or 0 for full): "
   read -r choices
@@ -86,11 +90,12 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       1) INSTALL_SETTINGS=true ;;
       2) INSTALL_STATUSLINE=true ;;
       3) INSTALL_CLAUDE_MD=true ;;
-      4) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true ;;
+      4) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true; INSTALL_MCP=true ;;
       5) KNOWLEDGE=true ;;
       6) AI_DAILY=true ;;
       7) LINK=true ;;
-      0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true
+      8) INSTALL_MCP=true ;;
+      0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true; INSTALL_MCP=true
          KNOWLEDGE=true; AI_DAILY=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
     esac
@@ -239,6 +244,135 @@ if [[ "$AI_DAILY" == "true" ]]; then
   fi
 fi
 
+# ── MCP servers ──
+if [[ "$INSTALL_MCP" == "true" ]]; then
+  echo ""
+  echo "▶ MCP servers..."
+
+  MCP_FILE="$CLAUDE_DIR/.mcp.json"
+  SHELL_RC="$HOME/.zshrc"
+
+  # ensure npm packages
+  for pkg in "@modelcontextprotocol/server-postgres" "@modelcontextprotocol/server-mysql"; do
+    if npm list -g "$pkg" &>/dev/null; then
+      echo "  ✓ $pkg already installed"
+    else
+      echo "  ▶ Installing $pkg..."
+      npm install -g "$pkg" 2>/dev/null && echo "  ✓ $pkg installed" || echo "  ✗ $pkg install failed"
+    fi
+  done
+
+  # load existing .mcp.json or start fresh
+  if [[ -f "$MCP_FILE" ]]; then
+    MCP_JSON=$(cat "$MCP_FILE")
+    echo "  ℹ Existing .mcp.json found, will merge new connections"
+  else
+    MCP_JSON='{"mcpServers":{}}'
+  fi
+
+  # --- PostgreSQL ---
+  echo ""
+  printf "  Configure PostgreSQL connections? (y/n): "
+  read -r do_pg
+  if [[ "$do_pg" == "y" || "$do_pg" == "Y" ]]; then
+    pg_index=1
+    while true; do
+      echo ""
+      echo "  ── PostgreSQL #$pg_index ──"
+      printf "    Connection name (e.g. ask-dorian-pg): "
+      read -r pg_name
+      [[ -z "$pg_name" ]] && break
+
+      ENV_VAR="MCP_PG_$(echo "$pg_name" | tr '[:lower:]-' '[:upper:]_')_URL"
+
+      printf "    Host [localhost]: "
+      read -r pg_host; pg_host="${pg_host:-localhost}"
+      printf "    Port [5432]: "
+      read -r pg_port; pg_port="${pg_port:-5432}"
+      printf "    Database: "
+      read -r pg_db
+      printf "    User: "
+      read -r pg_user
+      printf "    Password: "
+      read -rs pg_pass; echo ""
+
+      pg_url="postgresql://${pg_user}:${pg_pass}@${pg_host}:${pg_port}/${pg_db}"
+
+      # write env var to .zshrc (if not already there)
+      if ! grep -q "^export ${ENV_VAR}=" "$SHELL_RC" 2>/dev/null; then
+        echo "export ${ENV_VAR}=\"${pg_url}\"" >> "$SHELL_RC"
+        echo "    ✓ \$${ENV_VAR} → .zshrc"
+      else
+        echo "    = \$${ENV_VAR} already in .zshrc"
+      fi
+
+      # add to MCP JSON
+      MCP_JSON=$(echo "$MCP_JSON" | jq --arg name "$pg_name" --arg env "\$${ENV_VAR}" \
+        '.mcpServers[$name] = {"command":"npx","args":["-y","@modelcontextprotocol/server-postgres",$env]}')
+
+      echo "    ✓ MCP server '$pg_name' configured"
+
+      printf "    Add another PostgreSQL? (y/n): "
+      read -r more_pg
+      [[ "$more_pg" != "y" && "$more_pg" != "Y" ]] && break
+      pg_index=$((pg_index + 1))
+    done
+  fi
+
+  # --- MySQL ---
+  echo ""
+  printf "  Configure MySQL connections? (y/n): "
+  read -r do_mysql
+  if [[ "$do_mysql" == "y" || "$do_mysql" == "Y" ]]; then
+    my_index=1
+    while true; do
+      echo ""
+      echo "  ── MySQL #$my_index ──"
+      printf "    Connection name (e.g. work-mysql): "
+      read -r my_name
+      [[ -z "$my_name" ]] && break
+
+      ENV_VAR="MCP_MYSQL_$(echo "$my_name" | tr '[:lower:]-' '[:upper:]_')_URL"
+
+      printf "    Host [localhost]: "
+      read -r my_host; my_host="${my_host:-localhost}"
+      printf "    Port [3306]: "
+      read -r my_port; my_port="${my_port:-3306}"
+      printf "    Database: "
+      read -r my_db
+      printf "    User: "
+      read -r my_user
+      printf "    Password: "
+      read -rs my_pass; echo ""
+
+      my_url="mysql://${my_user}:${my_pass}@${my_host}:${my_port}/${my_db}"
+
+      if ! grep -q "^export ${ENV_VAR}=" "$SHELL_RC" 2>/dev/null; then
+        echo "export ${ENV_VAR}=\"${my_url}\"" >> "$SHELL_RC"
+        echo "    ✓ \$${ENV_VAR} → .zshrc"
+      else
+        echo "    = \$${ENV_VAR} already in .zshrc"
+      fi
+
+      MCP_JSON=$(echo "$MCP_JSON" | jq --arg name "$my_name" --arg env "\$${ENV_VAR}" \
+        '.mcpServers[$name] = {"command":"npx","args":["-y","@modelcontextprotocol/server-mysql",$env]}')
+
+      echo "    ✓ MCP server '$my_name' configured"
+
+      printf "    Add another MySQL? (y/n): "
+      read -r more_my
+      [[ "$more_my" != "y" && "$more_my" != "Y" ]] && break
+      my_index=$((my_index + 1))
+    done
+  fi
+
+  # write .mcp.json
+  echo "$MCP_JSON" | jq '.' > "$MCP_FILE"
+  echo ""
+  echo "  ✓ .mcp.json written to $MCP_FILE"
+  echo "  ℹ Run 'source ~/.zshrc' or restart shell to load env vars"
+fi
+
 # ── Register CLI command ──
 if [[ "$LINK" == "true" ]]; then
   echo ""
@@ -262,6 +396,7 @@ ITEMS=()
 [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
 [[ "$AI_DAILY" == "true" ]] && ITEMS+=("AI-Daily→iCloud")
 [[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
+[[ "$INSTALL_MCP" == "true" ]] && ITEMS+=("MCP")
 
 if [[ ${#ITEMS[@]} -eq 0 ]]; then
   echo "  Nothing selected. Run 'claude-config' for interactive mode."
