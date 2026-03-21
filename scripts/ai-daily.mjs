@@ -376,11 +376,11 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers) {
   const sec1_hn = pickHN(KW_AI_PRODUCT, 5, 50);
 
   // ── Section 2: AI 工程与工具 (Top 10) ──
-  const sec2_gh = pickGH(KW_AI_TOOLS, 7);
-  const sec2_hn = pickHN(KW_AI_TOOLS, 3);
+  const sec2_gh = pickGH(KW_AI_TOOLS, 5);
+  const sec2_hn = pickHN(KW_AI_TOOLS, 5);
 
   // ── Section 3: AI 增强生态 (Top 5) — Skills / MCP / Plugins ──
-  const sec3_gh = pickGH(KW_AI_ENHANCE, 3);
+  const sec3_gh = pickGH(KW_AI_ENHANCE, 5);
   const sec3_hn = pickHN(KW_AI_ENHANCE, 2);
 
   // ── Section 4: Agent / RAG / LLM 应用 (Top 5) ──
