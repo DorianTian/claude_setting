@@ -9,7 +9,7 @@
  *   3. AI 增强生态 (Top 5) — Skills / MCP / Plugins
  *   4. AI 工具生态 Top 5 (全局视角)
  *   5. Agent / RAG / LLM 应用 (Top 5)
- *   6. 开源热点 (Top 5, 近 14 天新项目)
+ *   6. 开源热点 (Top 5, 近 30 天活跃)
  *   7. 前端 / 数据可视化 (Top 5)
  *   8. 值得精读的论文 (Top 5)
  *
@@ -215,17 +215,18 @@ async function fetchGitHub() {
     return d.toISOString().split("T")[0];
   };
 
+  // "近期火" = 30天内有 push 活动 + 按 star 排序（不限创建时间）
   const queries = [
-    // AI tools & LLM — created in last 14 days, fast growers
-    `q=topic:llm+created:>${daysAgo(14)}+stars:>20&sort=stars&order=desc&per_page=15`,
-    // AI repos — created in last 30 days, gaining traction
-    `q=topic:artificial-intelligence+created:>${daysAgo(30)}+stars:>100&sort=stars&order=desc&per_page=15`,
-    // Agent — recent
-    `q=topic:ai-agent+created:>${daysAgo(14)}+stars:>10&sort=stars&order=desc&per_page=10`,
-    // MCP / Skills / Plugins ecosystem
-    `q=mcp+server+created:>${daysAgo(14)}+stars:>5&sort=stars&order=desc&per_page=10`,
-    // Data Viz — active recently
-    `q=topic:data-visualization+pushed:>${daysAgo(14)}&sort=stars&order=desc&per_page=10`,
+    // AI tools & LLM — active in last 30 days
+    `q=topic:llm+pushed:>${daysAgo(30)}+stars:>100&sort=stars&order=desc&per_page=15`,
+    // AI repos — active in last 30 days
+    `q=topic:artificial-intelligence+pushed:>${daysAgo(30)}+stars:>100&sort=stars&order=desc&per_page=15`,
+    // Agent — active in last 30 days
+    `q=topic:ai-agent+pushed:>${daysAgo(30)}+stars:>50&sort=stars&order=desc&per_page=10`,
+    // MCP / Skills / Plugins — active in last 30 days
+    `q=mcp+server+pushed:>${daysAgo(30)}+stars:>5&sort=stars&order=desc&per_page=10`,
+    // Data Viz — active in last 30 days
+    `q=topic:data-visualization+pushed:>${daysAgo(30)}+stars:>50&sort=stars&order=desc&per_page=10`,
   ];
 
   const seen = new Set();
@@ -403,7 +404,7 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop
       .filter((r) => !usedGH.has(r.name) && matchKeywords(r.text, keywords));
 
     if (preferNew) {
-      const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
         .toISOString().split("T")[0];
       const newRepos = repos.filter((r) => r.created > cutoff);
       if (newRepos.length >= n) repos = newRepos;
@@ -439,12 +440,9 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop
     .filter((p) => matchKeywords(p.text, KW_AGENT_RAG))
     .slice(0, 2);
 
-  // ── Section 6: 开源热点 (Top 5) ──
-  // Repos not yet picked, prefer new (created < 90 days), sort by stars
-  const cutoff14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
-    .toISOString().split("T")[0];
+  // ── Section 6: 开源热点 (Top 5) — 未被其他板块选中的高 star 活跃项目 ──
   const sec6_gh_hot = githubRepos
-    .filter((r) => !usedGH.has(r.name) && r.created > cutoff14)
+    .filter((r) => !usedGH.has(r.name))
     .sort((a, b) => b.stars - a.stars)
     .slice(0, 5)
     .map((r) => { usedGH.add(r.name); return r; });
@@ -546,7 +544,7 @@ function generateMarkdown(date, sections) {
   lines.push("");
 
   // 6. 开源热点
-  lines.push("## 🔥 开源热点（近 14 天新项目）");
+  lines.push("## 🔥 开源热点（近 30 天活跃）");
   lines.push("");
   if (sec6_gh_hot.length === 0) lines.push("_今日暂无新兴开源项目_");
   else lines.push(...mdGHList(sec6_gh_hot, true));
@@ -666,7 +664,7 @@ function generatePlainText(date, sections) {
   lines.push("");
 
   // 6
-  lines.push("[🔥 开源热点（近 14 天新项目）]");
+  lines.push("[🔥 开源热点（近 30 天活跃）]");
   lines.push("");
   if (sec6_gh_hot.length === 0) lines.push("  今日暂无");
   else txtGH(sec6_gh_hot);
