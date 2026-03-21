@@ -1,122 +1,364 @@
 #!/bin/bash
-# Claude Code Status Line - Dorian's Setup
-# Line 1: directory + git branch
-# Line 2: model | context% (color-coded bar) | cost | +lines/-lines | duration | cache%
+set -f
 
-set -euo pipefail
+input=$(cat)
 
-INPUT=$(cat)
+if [ -z "$input" ]; then
+    printf "Claude"
+    exit 0
+fi
 
-# ── Parse fields ──
-MODEL=$(echo "$INPUT" | jq -r '.model.display_name // "unknown"')
-CONTEXT_PCT=$(echo "$INPUT" | jq -r '.context_window.used_percentage // 0')
-COST=$(echo "$INPUT" | jq -r '.cost.total_cost_usd // 0')
-LINES_ADDED=$(echo "$INPUT" | jq -r '.cost.total_lines_added // 0')
-LINES_REMOVED=$(echo "$INPUT" | jq -r '.cost.total_lines_removed // 0')
-DURATION_MS=$(echo "$INPUT" | jq -r '.cost.total_duration_ms // 0')
-CONTEXT_SIZE=$(echo "$INPUT" | jq -r '.context_window.context_window_size // 200000')
-CACHE_READ=$(echo "$INPUT" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
-INPUT_TOKENS=$(echo "$INPUT" | jq -r '.context_window.current_usage.input_tokens // 0')
-CURRENT_DIR=$(echo "$INPUT" | jq -r '.workspace.current_dir // ""')
-PROJECT_DIR=$(echo "$INPUT" | jq -r '.workspace.project_dir // ""')
+# ── Colors ──────────────────────────────────────────────
+blue='\033[38;2;0;153;255m'
+orange='\033[38;2;255;176;85m'
+green='\033[38;2;0;175;80m'
+cyan='\033[38;2;86;182;194m'
+red='\033[38;2;255;85;85m'
+yellow='\033[38;2;230;200;0m'
+white='\033[38;2;220;220;220m'
+magenta='\033[38;2;180;140;255m'
+dim='\033[2m'
+reset='\033[0m'
 
-# ── Git branch (cached 5s) ──
-CACHE_FILE="/tmp/.claude_statusline_git_$$"
-CACHE_TTL=5
-GIT_BRANCH=""
+sep=" ${dim}│${reset} "
 
-get_git_branch() {
-  local dir="${PROJECT_DIR:-$CURRENT_DIR}"
-  if [ -n "$dir" ] && [ -d "$dir" ]; then
-    GIT_BRANCH=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-  fi
+# ── Helpers ─────────────────────────────────────────────
+format_tokens() {
+    local num=$1
+    if [ "$num" -ge 1000000 ]; then
+        awk "BEGIN {printf \"%.1fm\", $num / 1000000}"
+    elif [ "$num" -ge 1000 ]; then
+        awk "BEGIN {printf \"%.0fk\", $num / 1000}"
+    else
+        printf "%d" "$num"
+    fi
 }
 
-if [ -f "$CACHE_FILE" ]; then
-  CACHE_AGE=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || echo 0) ))
-  if [ "$CACHE_AGE" -lt "$CACHE_TTL" ]; then
-    GIT_BRANCH=$(cat "$CACHE_FILE")
-  else
-    get_git_branch
-    echo "$GIT_BRANCH" > "$CACHE_FILE"
-  fi
+color_for_pct() {
+    local pct=$1
+    if [ "$pct" -ge 90 ]; then printf "$red"
+    elif [ "$pct" -ge 70 ]; then printf "$yellow"
+    elif [ "$pct" -ge 50 ]; then printf "$orange"
+    else printf "$green"
+    fi
+}
+
+build_bar() {
+    local pct=$1
+    local width=$2
+    [ "$pct" -lt 0 ] 2>/dev/null && pct=0
+    [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+
+    local filled=$(( pct * width / 100 ))
+    local empty=$(( width - filled ))
+    local bar_color
+    bar_color=$(color_for_pct "$pct")
+
+    local filled_str="" empty_str=""
+    for ((i=0; i<filled; i++)); do filled_str+="●"; done
+    for ((i=0; i<empty; i++)); do empty_str+="○"; done
+
+    printf "${bar_color}${filled_str}${dim}${empty_str}${reset}"
+}
+
+iso_to_epoch() {
+    local iso_str="$1"
+
+    local epoch
+    epoch=$(date -d "${iso_str}" +%s 2>/dev/null)
+    if [ -n "$epoch" ]; then
+        echo "$epoch"
+        return 0
+    fi
+
+    local stripped="${iso_str%%.*}"
+    stripped="${stripped%%Z}"
+    stripped="${stripped%%+*}"
+    stripped="${stripped%%-[0-9][0-9]:[0-9][0-9]}"
+
+    if [[ "$iso_str" == *"Z"* ]] || [[ "$iso_str" == *"+00:00"* ]] || [[ "$iso_str" == *"-00:00"* ]]; then
+        epoch=$(env TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+    else
+        epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$stripped" +%s 2>/dev/null)
+    fi
+
+    if [ -n "$epoch" ]; then
+        echo "$epoch"
+        return 0
+    fi
+
+    return 1
+}
+
+format_reset_time() {
+    local iso_str="$1"
+    local style="$2"
+    [ -z "$iso_str" ] || [ "$iso_str" = "null" ] && return
+
+    local epoch
+    epoch=$(iso_to_epoch "$iso_str")
+    [ -z "$epoch" ] && return
+
+    local result=""
+    case "$style" in
+        time)
+            result=$(date -j -r "$epoch" +"%l:%M%p" 2>/dev/null | sed 's/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
+            [ -z "$result" ] && result=$(date -d "@$epoch" +"%l:%M%P" 2>/dev/null | sed 's/^ //; s/\.//g')
+            ;;
+        datetime)
+            result=$(date -j -r "$epoch" +"%b %-d, %l:%M%p" 2>/dev/null | sed 's/  / /g; s/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
+            [ -z "$result" ] && result=$(date -d "@$epoch" +"%b %-d, %l:%M%P" 2>/dev/null | sed 's/  / /g; s/^ //; s/\.//g')
+            ;;
+        *)
+            result=$(date -j -r "$epoch" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+            [ -z "$result" ] && result=$(date -d "@$epoch" +"%b %-d" 2>/dev/null)
+            ;;
+    esac
+    printf "%s" "$result"
+}
+
+# ── Extract JSON data ───────────────────────────────────
+model_name=$(echo "$input" | jq -r '.model.display_name // "Claude"')
+
+size=$(echo "$input" | jq -r '.context_window.context_window_size // 200000')
+[ "$size" -eq 0 ] 2>/dev/null && size=200000
+
+input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // 0')
+cache_create=$(echo "$input" | jq -r '.context_window.current_usage.cache_creation_input_tokens // 0')
+cache_read=$(echo "$input" | jq -r '.context_window.current_usage.cache_read_input_tokens // 0')
+current=$(( input_tokens + cache_create + cache_read ))
+
+used_tokens=$(format_tokens $current)
+total_tokens=$(format_tokens $size)
+
+if [ "$size" -gt 0 ]; then
+    pct_used=$(( current * 100 / size ))
 else
-  get_git_branch
-  echo "$GIT_BRANCH" > "$CACHE_FILE"
+    pct_used=0
 fi
 
-# ── Directory display (shorten home, show last 2 segments) ──
-DISPLAY_DIR=""
-if [ -n "$CURRENT_DIR" ]; then
-  DISPLAY_DIR=$(echo "$CURRENT_DIR" | sed "s|^$HOME|~|")
+effort="default"
+settings_path="$HOME/.claude/settings.json"
+if [ -f "$settings_path" ]; then
+    effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
 fi
 
-# ── Duration format ──
-DURATION_SEC=$((DURATION_MS / 1000))
-if [ "$DURATION_SEC" -ge 3600 ]; then
-  DURATION="$((DURATION_SEC / 3600))h$((DURATION_SEC % 3600 / 60))m"
-elif [ "$DURATION_SEC" -ge 60 ]; then
-  DURATION="$((DURATION_SEC / 60))m$((DURATION_SEC % 60))s"
-else
-  DURATION="${DURATION_SEC}s"
+# ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Thinking ──
+pct_color=$(color_for_pct "$pct_used")
+cwd=$(echo "$input" | jq -r '.cwd // ""')
+[ -z "$cwd" ] || [ "$cwd" = "null" ] && cwd=$(pwd)
+dirname=$(basename "$cwd")
+
+git_branch=""
+git_dirty=""
+git_changes=""
+is_git=false
+if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    is_git=true
+    git_branch=$(git -C "$cwd" symbolic-ref --short HEAD 2>/dev/null)
+    if [ -n "$(git -C "$cwd" status --porcelain 2>/dev/null)" ]; then
+        git_dirty="*"
+    fi
+
+    # Diff stats: staged + unstaged (tracked files)
+    diff_stat=$(git -C "$cwd" diff --shortstat HEAD 2>/dev/null)
+    if [ -z "$diff_stat" ]; then
+        diff_stat=$(git -C "$cwd" diff --cached --shortstat 2>/dev/null)
+    fi
+    files_changed=0; insertions=0; deletions=0
+    if [ -n "$diff_stat" ]; then
+        files_changed=$(echo "$diff_stat" | grep -oE '[0-9]+ file' | grep -oE '[0-9]+')
+        insertions=$(echo "$diff_stat" | grep -oE '[0-9]+ insertion' | grep -oE '[0-9]+')
+        deletions=$(echo "$diff_stat" | grep -oE '[0-9]+ deletion' | grep -oE '[0-9]+')
+        [ -z "$files_changed" ] && files_changed=0
+        [ -z "$insertions" ] && insertions=0
+        [ -z "$deletions" ] && deletions=0
+    fi
+    # Untracked files count
+    untracked=$(git -C "$cwd" ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+    [ -z "$untracked" ] && untracked=0
+    total_files=$((files_changed + untracked))
+    if [ "$total_files" -gt 0 ]; then
+        git_changes="${dim}Δ${reset} ${white}${total_files}f${reset}"
+        if [ "$insertions" -gt 0 ] || [ "$deletions" -gt 0 ]; then
+            git_changes+=" ${green}+${insertions}${reset} ${red}-${deletions}${reset}"
+        fi
+        if [ "$untracked" -gt 0 ]; then
+            git_changes+=" ${yellow}?${untracked}${reset}"
+        fi
+    fi
 fi
 
-# ── Cost format ──
-COST_FMT=$(printf '$%.2f' "$COST")
-
-# ── Context window label ──
-if [ "$CONTEXT_SIZE" -ge 1000000 ]; then
-  CTX_LABEL="1M"
-else
-  CTX_LABEL="200K"
+session_duration=""
+session_start=$(echo "$input" | jq -r '.session.start_time // empty')
+if [ -n "$session_start" ] && [ "$session_start" != "null" ]; then
+    start_epoch=$(iso_to_epoch "$session_start")
+    if [ -n "$start_epoch" ]; then
+        now_epoch=$(date +%s)
+        elapsed=$(( now_epoch - start_epoch ))
+        if [ "$elapsed" -ge 3600 ]; then
+            session_duration="$(( elapsed / 3600 ))h$(( (elapsed % 3600) / 60 ))m"
+        elif [ "$elapsed" -ge 60 ]; then
+            session_duration="$(( elapsed / 60 ))m"
+        else
+            session_duration="${elapsed}s"
+        fi
+    fi
 fi
 
-# ── Context bar (20 chars) ──
-BAR_WIDTH=20
-CONTEXT_INT=${CONTEXT_PCT%.*}
-CONTEXT_INT=${CONTEXT_INT:-0}
-FILLED=$((CONTEXT_INT * BAR_WIDTH / 100))
-EMPTY=$((BAR_WIDTH - FILLED))
-
-# ── Colors ──
-if [ "$CONTEXT_INT" -lt 50 ]; then
-  COLOR="\033[32m"  # green
-elif [ "$CONTEXT_INT" -lt 75 ]; then
-  COLOR="\033[33m"  # yellow
-elif [ "$CONTEXT_INT" -lt 90 ]; then
-  COLOR="\033[38;5;208m"  # orange
-else
-  COLOR="\033[31m"  # red
+line1="${blue}${model_name}${reset}"
+line1+="${sep}"
+line1+="✍️ ${pct_color}${pct_used}%${reset}"
+line1+="${sep}"
+line1+="${cyan}${dirname}${reset}"
+if [ -n "$git_branch" ]; then
+    line1+=" ${green}(${git_branch}${red}${git_dirty}${green})${reset}"
 fi
-RESET="\033[0m"
-DIM="\033[2m"
-GREEN="\033[32m"
-RED="\033[31m"
-CYAN="\033[36m"
-MAGENTA="\033[35m"
+if [ -n "$git_changes" ]; then
+    line1+="${sep}"
+    line1+="${git_changes}"
+fi
+if [ -n "$session_duration" ]; then
+    line1+="${sep}"
+    line1+="${dim}⏱ ${reset}${white}${session_duration}${reset}"
+fi
+line1+="${sep}"
+case "$effort" in
+    high)   line1+="${magenta}● ${effort}${reset}" ;;
+    medium) line1+="${dim}◑ ${effort}${reset}" ;;
+    low)    line1+="${dim}◔ ${effort}${reset}" ;;
+    *)      line1+="${dim}◑ ${effort}${reset}" ;;
+esac
 
-# ── Build bar ──
-BAR=""
-for ((i=0; i<FILLED; i++)); do BAR+="█"; done
-for ((i=0; i<EMPTY; i++)); do BAR+="░"; done
+# ── OAuth token resolution ──────────────────────────────
+get_oauth_token() {
+    local token=""
 
-# ── Cache hit rate ──
-CACHE_STR=""
-if [ "$INPUT_TOKENS" -gt 0 ] 2>/dev/null; then
-  TOTAL=$((CACHE_READ + INPUT_TOKENS))
-  if [ "$TOTAL" -gt 0 ]; then
-    CACHE_PCT=$((CACHE_READ * 100 / TOTAL))
-    CACHE_STR="cache:${CACHE_PCT}%"
-  fi
+    if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+        echo "$CLAUDE_CODE_OAUTH_TOKEN"
+        return 0
+    fi
+
+    if command -v security >/dev/null 2>&1; then
+        local blob
+        blob=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
+        if [ -n "$blob" ]; then
+            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+            if [ -n "$token" ] && [ "$token" != "null" ]; then
+                echo "$token"
+                return 0
+            fi
+        fi
+    fi
+
+    local creds_file="${HOME}/.claude/.credentials.json"
+    if [ -f "$creds_file" ]; then
+        token=$(jq -r '.claudeAiOauth.accessToken // empty' "$creds_file" 2>/dev/null)
+        if [ -n "$token" ] && [ "$token" != "null" ]; then
+            echo "$token"
+            return 0
+        fi
+    fi
+
+    if command -v secret-tool >/dev/null 2>&1; then
+        local blob
+        blob=$(timeout 2 secret-tool lookup service "Claude Code-credentials" 2>/dev/null)
+        if [ -n "$blob" ]; then
+            token=$(echo "$blob" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
+            if [ -n "$token" ] && [ "$token" != "null" ]; then
+                echo "$token"
+                return 0
+            fi
+        fi
+    fi
+
+    echo ""
+}
+
+# ── Fetch usage data (cached) ──────────────────────────
+cache_file="/tmp/claude/statusline-usage-cache.json"
+cache_max_age=60
+mkdir -p /tmp/claude
+
+needs_refresh=true
+usage_data=""
+
+if [ -f "$cache_file" ]; then
+    cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)
+    now=$(date +%s)
+    cache_age=$(( now - cache_mtime ))
+    if [ "$cache_age" -lt "$cache_max_age" ]; then
+        needs_refresh=false
+        usage_data=$(cat "$cache_file" 2>/dev/null)
+    fi
 fi
 
-# ── Line 1: directory + git branch ──
-LINE1="${CYAN}${DISPLAY_DIR}${RESET}"
-if [ -n "$GIT_BRANCH" ]; then
-  LINE1="${LINE1} ${MAGENTA} ${GIT_BRANCH}${RESET}"
+if $needs_refresh; then
+    token=$(get_oauth_token)
+    if [ -n "$token" ] && [ "$token" != "null" ]; then
+        response=$(curl -s --max-time 5 \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $token" \
+            -H "anthropic-beta: oauth-2025-04-20" \
+            -H "User-Agent: claude-code/2.1.34" \
+            "https://api.anthropic.com/api/oauth/usage" 2>/dev/null)
+        if [ -n "$response" ] && echo "$response" | jq -e '.five_hour' >/dev/null 2>&1; then
+            usage_data="$response"
+            echo "$response" > "$cache_file"
+        fi
+    fi
+    if [ -z "$usage_data" ] && [ -f "$cache_file" ]; then
+        usage_data=$(cat "$cache_file" 2>/dev/null)
+    fi
 fi
 
-# ── Line 2: model | context | cost | lines | duration | cache ──
-LINE2="${DIM}${MODEL}${RESET} ${COLOR}${CTX_LABEL} ${CONTEXT_INT}% [${BAR}]${RESET} ${DIM}${COST_FMT}${RESET} ${GREEN}+${LINES_ADDED}${RESET}/${RED}-${LINES_REMOVED}${RESET} ${DIM}${DURATION} ${CACHE_STR}${RESET}"
+# ── Rate limit lines ────────────────────────────────────
+rate_lines=""
 
-printf "%b\n%b" "$LINE1" "$LINE2"
+if [ -n "$usage_data" ] && echo "$usage_data" | jq -e . >/dev/null 2>&1; then
+    bar_width=10
+
+    five_hour_pct=$(echo "$usage_data" | jq -r '.five_hour.utilization // 0' | awk '{printf "%.0f", $1}')
+    five_hour_reset_iso=$(echo "$usage_data" | jq -r '.five_hour.resets_at // empty')
+    five_hour_reset=$(format_reset_time "$five_hour_reset_iso" "time")
+    five_hour_bar=$(build_bar "$five_hour_pct" "$bar_width")
+    five_hour_pct_color=$(color_for_pct "$five_hour_pct")
+    five_hour_pct_fmt=$(printf "%3d" "$five_hour_pct")
+
+    rate_lines+="${white}current${reset} ${five_hour_bar} ${five_hour_pct_color}${five_hour_pct_fmt}%${reset} ${dim}⟳${reset} ${white}${five_hour_reset}${reset}"
+
+    seven_day_pct=$(echo "$usage_data" | jq -r '.seven_day.utilization // 0' | awk '{printf "%.0f", $1}')
+    seven_day_reset_iso=$(echo "$usage_data" | jq -r '.seven_day.resets_at // empty')
+    seven_day_reset=$(format_reset_time "$seven_day_reset_iso" "datetime")
+    seven_day_bar=$(build_bar "$seven_day_pct" "$bar_width")
+    seven_day_pct_color=$(color_for_pct "$seven_day_pct")
+    seven_day_pct_fmt=$(printf "%3d" "$seven_day_pct")
+
+    rate_lines+="\n${white}weekly${reset}  ${seven_day_bar} ${seven_day_pct_color}${seven_day_pct_fmt}%${reset} ${dim}⟳${reset} ${white}${seven_day_reset}${reset}"
+
+    extra_enabled=$(echo "$usage_data" | jq -r '.extra_usage.is_enabled // false')
+    if [ "$extra_enabled" = "true" ]; then
+        extra_pct=$(echo "$usage_data" | jq -r '.extra_usage.utilization // 0' | awk '{printf "%.0f", $1}')
+        extra_used=$(echo "$usage_data" | jq -r '.extra_usage.used_credits // 0' | awk '{printf "%.2f", $1/100}')
+        extra_limit=$(echo "$usage_data" | jq -r '.extra_usage.monthly_limit // 0' | awk '{printf "%.2f", $1/100}')
+        extra_bar=$(build_bar "$extra_pct" "$bar_width")
+        extra_pct_color=$(color_for_pct "$extra_pct")
+
+        extra_reset=$(date -v+1m -v1d +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        if [ -z "$extra_reset" ]; then
+            extra_reset=$(date -d "$(date +%Y-%m-01) +1 month" +"%b %-d" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        fi
+
+        extra_col="${white}extra${reset}   ${extra_bar} ${extra_pct_color}\$${extra_used}${dim}/${reset}${white}\$${extra_limit}${reset}"
+        extra_reset_line="${dim}resets ${reset}${white}${extra_reset}${reset}"
+        rate_lines+="\n${extra_col}"
+        rate_lines+="\n${extra_reset_line}"
+    fi
+fi
+
+# ── Output ──────────────────────────────────────────────
+printf "%b" "$line1"
+[ -n "$rate_lines" ] && printf "\n\n%b" "$rate_lines"
+
+exit 0
