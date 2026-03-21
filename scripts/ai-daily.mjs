@@ -293,56 +293,9 @@ async function fetchArxiv() {
   });
 }
 
-// ─── Hugging Face Daily Papers ─────────────────────────────
-
-async function fetchHFPapers() {
-  console.log("🤗 Fetching Hugging Face Daily Papers...");
-
-  // Try daily_papers first, then flat /papers as fallback
-  let data = await fetchJSON("https://huggingface.co/api/daily_papers");
-
-  if (data && Array.isArray(data) && data.length > 0) {
-    // Wrapped format: { paper: { ... }, submittedBy, ... }
-    const papers = data
-      .filter((p) => p.paper && (p.paper.upvotes || 0) >= 3)
-      .slice(0, 15)
-      .map((p) => ({
-        title: p.paper.title || "",
-        summary: (p.paper.ai_summary || p.paper.summary || "").replace(/\s+/g, " ").slice(0, 300),
-        link: `https://huggingface.co/papers/${p.paper.id}`,
-        upvotes: p.paper.upvotes || 0,
-        published: p.paper.publishedAt?.split("T")[0] || p.publishedAt?.split("T")[0] || "",
-        authors: p.paper.authors?.slice(0, 3).map((a) => a.name || a.fullname || a.user?.fullname || a._id || "") || [],
-        text: (p.paper.title || "") + " " + (p.paper.summary || ""),
-      }));
-    console.log(`  Found ${papers.length} papers from /daily_papers (upvotes ≥ 3)`);
-    return papers;
-  }
-
-  // Fallback: flat /papers endpoint
-  data = await fetchJSON("https://huggingface.co/api/papers");
-  if (!data || !Array.isArray(data)) return [];
-
-  const papers = data
-    .filter((p) => (p.upvotes || 0) >= 3)
-    .slice(0, 15)
-    .map((p) => ({
-      title: p.title || "",
-      summary: (p.ai_summary || p.summary || "").replace(/\s+/g, " ").slice(0, 300),
-      link: `https://huggingface.co/papers/${p.id}`,
-      upvotes: p.upvotes || 0,
-      published: p.publishedAt?.split("T")[0] || "",
-      authors: p.authors?.slice(0, 3).map((a) => a.name || a.fullname || a._id || "") || [],
-      text: (p.title || "") + " " + (p.summary || ""),
-    }));
-
-  console.log(`  Found ${papers.length} papers from /papers (upvotes ≥ 3)`);
-  return papers;
-}
-
 // ─── Categorize & Build Sections ───────────────────────────
 
-function buildSections(hnStories, githubRepos, arxivPapers, hfPapers) {
+function buildSections(hnStories, githubRepos, arxivPapers) {
   const usedHN = new Set();
   const usedGH = new Set();
 
@@ -400,10 +353,13 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers) {
   const sec6_gh = pickGH(KW_FRONTEND_DATAVIZ, 3);
   const sec6_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
 
-  // ── Section 7: 值得精读的论文 (Top 5) ──
-  const sec7_hf = hfPapers.slice(0, 5);
+  // ── Section 7: 值得精读的论文 (Top 5) — ArXiv 中未被板块 4 选走的 ──
+  const usedArxiv = new Set(sec4_arxiv.map((p) => p.link));
+  const sec7_arxiv = arxivPapers
+    .filter((p) => !usedArxiv.has(p.link))
+    .slice(0, 5);
 
-  return { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf };
+  return { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_arxiv };
 }
 
 // ─── Markdown Output ───────────────────────────────────────
@@ -431,7 +387,7 @@ function mdGHList(items, showAge = false) {
 }
 
 function generateMarkdown(date, sections) {
-  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_arxiv } = sections;
   const lines = [];
 
   lines.push(`# 技术日报 — ${date}`);
@@ -494,13 +450,13 @@ function generateMarkdown(date, sections) {
   // 7. 值得精读的论文
   lines.push("## 📄 值得精读的论文");
   lines.push("");
-  if (sec7_hf.length === 0) {
+  if (sec7_arxiv.length === 0) {
     lines.push("_今日暂无推荐论文_");
   } else {
-    for (const p of sec7_hf) {
+    for (const p of sec7_arxiv) {
       const authStr = p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
-      lines.push(`- **[${p.title}](${p.link})** 👍 ${p.upvotes}`);
-      lines.push(`  ${authStr}`);
+      lines.push(`- **[${p.title}](${p.link})**`);
+      lines.push(`  ${authStr} | ${p.published}`);
       lines.push(`  ${p.summary.slice(0, 150)}...`);
       lines.push("");
     }
@@ -517,7 +473,7 @@ function generateMarkdown(date, sections) {
 // ─── Plain Text Output ────────────────────────────────────
 
 function generatePlainText(date, sections) {
-  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_arxiv } = sections;
   const lines = [];
   const sep = "─".repeat(60);
 
@@ -603,9 +559,10 @@ function generatePlainText(date, sections) {
   // 7
   lines.push("[📄 值得精读的论文]");
   lines.push("");
-  if (sec7_hf.length === 0) lines.push("  今日暂无");
-  else sec7_hf.forEach((p, i) => {
-    lines.push(`  ${i + 1}. ${p.title}  👍 ${p.upvotes}`);
+  if (sec7_arxiv.length === 0) lines.push("  今日暂无");
+  else sec7_arxiv.forEach((p, i) => {
+    lines.push(`  ${i + 1}. ${p.title}`);
+    lines.push(`     ${p.authors.join(", ")} | ${p.published}`);
     lines.push(`     ${p.summary.slice(0, 120)}...`);
     lines.push(`     ${p.link}`);
     lines.push("");
@@ -641,17 +598,16 @@ async function main() {
 
   // HN, ArXiv, HF can run in parallel (different domains)
   // GitHub Top 5 and trending run sequentially (same domain, rate limited)
-  const [hnStories, arxivPapers, hfPapers] = await Promise.all([
+  const [hnStories, arxivPapers] = await Promise.all([
     fetchHackerNews(),
     fetchArxiv(),
-    fetchHFPapers(),
   ]);
 
   const githubRepos = await fetchGitHub();
 
-  console.log(`\n📊 原始数据: HN ${hnStories.length} | GitHub ${githubRepos.length} | ArXiv ${arxivPapers.length} | HF ${hfPapers.length}`);
+  console.log(`\n📊 原始数据: HN ${hnStories.length} | GitHub ${githubRepos.length} | ArXiv ${arxivPapers.length}`);
 
-  const sections = buildSections(hnStories, githubRepos, arxivPapers, hfPapers);
+  const sections = buildSections(hnStories, githubRepos, arxivPapers);
 
   const md = generateMarkdown(date, sections);
   const txt = generatePlainText(date, sections);
