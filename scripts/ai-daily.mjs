@@ -3,14 +3,15 @@
 /**
  * AI Daily Digest - 每日技术资讯自动抓取
  *
- * 7 板块:
+ * 8 板块:
  *   1. AI 产品与发布 (Top 5)
  *   2. AI 工程与工具 (Top 10) ← 重点
- *   3. AI 工具生态 Top 5 (全局视角)
- *   4. Agent / RAG / LLM 应用 (Top 5)
- *   5. 开源热点 (Top 5)
- *   6. 前端 / 数据可视化 (Top 5)
- *   7. 值得精读的论文 (Top 5)
+ *   3. AI 增强生态 (Top 5) — Skills / MCP / Plugins
+ *   4. AI 工具生态 Top 5 (全局视角)
+ *   5. Agent / RAG / LLM 应用 (Top 5)
+ *   6. 开源热点 (Top 5, 近 14 天新项目)
+ *   7. 前端 / 数据可视化 (Top 5)
+ *   8. 值得精读的论文 (Top 5)
  *
  * Output: ~/AI-Daily/{YYYY-MM}/{YYYY-MM-DD}.md + .txt
  *
@@ -68,6 +69,20 @@ const KW_AGENT_RAG = [
   "memory", "context window", "long context",
   "knowledge graph", "graph rag",
   "evaluation", "eval", "benchmark",
+];
+
+const KW_AI_ENHANCE = [
+  "mcp server", "mcp tool", "mcp client", "model context protocol",
+  "claude skill", "claude hook", "claude extension",
+  "cursor rule", "cursor plugin", "cursor extension", ".cursorrules",
+  "windsurf rule", "cline rule",
+  "system prompt", "custom instruction", "custom prompt",
+  "ai plugin", "ai extension", "ai addon",
+  "copilot extension", "copilot plugin",
+  "claude.md", "claude code skill", "claude code hook",
+  "ai workflow", "ai automation", "ai pipeline",
+  "openai plugin", "gpt plugin", "gpts",
+  "ai memory", "ai persona", "ai assistant",
 ];
 
 const KW_FRONTEND_DATAVIZ = [
@@ -200,15 +215,16 @@ async function fetchGitHub() {
     return d.toISOString().split("T")[0];
   };
 
-  // 6 queries max to stay under GitHub rate limit (10 req/min unauthenticated)
   const queries = [
-    // AI tools & LLM (active this week)
-    `q=topic:llm+pushed:>${daysAgo(7)}&sort=stars&order=desc&per_page=15`,
-    // New AI repos (created recently, growing fast)
-    `q=topic:artificial-intelligence+created:>${daysAgo(30)}+stars:>50&sort=stars&order=desc&per_page=15`,
-    // Agent
-    `q=topic:ai-agent+pushed:>${daysAgo(14)}&sort=stars&order=desc&per_page=10`,
-    // Data Viz
+    // AI tools & LLM — created in last 14 days, fast growers
+    `q=topic:llm+created:>${daysAgo(14)}+stars:>20&sort=stars&order=desc&per_page=15`,
+    // AI repos — created in last 30 days, gaining traction
+    `q=topic:artificial-intelligence+created:>${daysAgo(30)}+stars:>100&sort=stars&order=desc&per_page=15`,
+    // Agent — recent
+    `q=topic:ai-agent+created:>${daysAgo(14)}+stars:>10&sort=stars&order=desc&per_page=10`,
+    // MCP / Skills / Plugins ecosystem
+    `q=mcp+server+created:>${daysAgo(14)}+stars:>5&sort=stars&order=desc&per_page=10`,
+    // Data Viz — active recently
     `q=topic:data-visualization+pushed:>${daysAgo(14)}&sort=stars&order=desc&per_page=10`,
   ];
 
@@ -410,34 +426,37 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop
   const sec2_gh = pickGH(KW_AI_TOOLS, 7, true);
   const sec2_hn = pickHN(KW_AI_TOOLS, 3);
 
-  // ── Section 3: AI 工具生态 Top 5 ──
-  const sec3_top = aiToolsTop;
+  // ── Section 3: AI 增强生态 (Top 5) — Skills / MCP / Plugins ──
+  const sec3_gh = pickGH(KW_AI_ENHANCE, 3, true);
+  const sec3_hn = pickHN(KW_AI_ENHANCE, 2);
 
-  // ── Section 4: Agent / RAG / LLM 应用 (Top 5) ──
-  const sec4_hn = pickHN(KW_AGENT_RAG, 3);
-  const sec4_arxiv = arxivPapers
+  // ── Section 4: AI 工具生态 Top 5 ──
+  const sec4_top = aiToolsTop;
+
+  // ── Section 5: Agent / RAG / LLM 应用 (Top 5) ──
+  const sec5_hn = pickHN(KW_AGENT_RAG, 3);
+  const sec5_arxiv = arxivPapers
     .filter((p) => matchKeywords(p.text, KW_AGENT_RAG))
     .slice(0, 2);
 
-  // ── Section 5: 开源热点 (Top 5) ──
+  // ── Section 6: 开源热点 (Top 5) ──
   // Repos not yet picked, prefer new (created < 90 days), sort by stars
-  const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+  const cutoff14 = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
     .toISOString().split("T")[0];
-  const sec5_gh_hot = githubRepos
-    .filter((r) => !usedGH.has(r.name) && r.created > cutoff90)
+  const sec6_gh_hot = githubRepos
+    .filter((r) => !usedGH.has(r.name) && r.created > cutoff14)
     .sort((a, b) => b.stars - a.stars)
     .slice(0, 5)
     .map((r) => { usedGH.add(r.name); return r; });
 
-  // ── Section 6: 前端 / 数据可视化 (Top 5) ──
-  // HN requires 2+ keyword matches to avoid false positives like "No AI in Node.js"
-  const sec6_gh = pickGH(KW_FRONTEND_DATAVIZ, 3, true);
-  const sec6_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
+  // ── Section 7: 前端 / 数据可视化 (Top 5) ──
+  const sec7_gh = pickGH(KW_FRONTEND_DATAVIZ, 3, true);
+  const sec7_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
 
-  // ── Section 7: 值得精读的论文 (Top 5) ──
-  const sec7_hf = hfPapers.slice(0, 5);
+  // ── Section 8: 值得精读的论文 (Top 5) ──
+  const sec8_hf = hfPapers.slice(0, 5);
 
-  return { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf };
+  return { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_top, sec5_hn, sec5_arxiv, sec6_gh_hot, sec7_gh, sec7_hn, sec8_hf };
 }
 
 // ─── Markdown Output ───────────────────────────────────────
@@ -465,7 +484,7 @@ function mdGHList(items, showAge = false) {
 }
 
 function generateMarkdown(date, sections) {
-  const { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_top, sec5_hn, sec5_arxiv, sec6_gh_hot, sec7_gh, sec7_hn, sec8_hf } = sections;
   const lines = [];
 
   lines.push(`# 技术日报 — ${date}`);
@@ -484,32 +503,39 @@ function generateMarkdown(date, sections) {
   lines.push("## 🔧 AI 工程与工具（重点）");
   lines.push("");
   if (sec2_gh.length === 0 && sec2_hn.length === 0) lines.push("_今日暂无 AI 工具更新_");
-  else { lines.push(...mdGHList(sec2_gh)); lines.push(...mdHNList(sec2_hn)); }
+  else { lines.push(...mdGHList(sec2_gh, true)); lines.push(...mdHNList(sec2_hn)); }
   lines.push("");
 
-  // 3. AI 工具生态 Top 5
+  // 3. AI 增强生态
+  lines.push("## 🧩 AI 增强生态（Skills / MCP / Plugins）");
+  lines.push("");
+  if (sec3_gh.length === 0 && sec3_hn.length === 0) lines.push("_今日暂无相关更新_");
+  else { lines.push(...mdGHList(sec3_gh, true)); lines.push(...mdHNList(sec3_hn)); }
+  lines.push("");
+
+  // 4. AI 工具生态 Top 5
   lines.push("## 🏆 AI 工具生态 Top 5");
   lines.push("");
-  if (sec3_top.length === 0) {
+  if (sec4_top.length === 0) {
     lines.push("_未能获取工具排行_");
   } else {
     lines.push("| 分类 | 项目 | 简介 | ⭐ Stars | 最近更新 |");
     lines.push("|------|------|------|----------|----------|");
-    for (const t of sec3_top) {
+    for (const t of sec4_top) {
       const desc = (t.description).slice(0, 40);
       lines.push(`| ${t.category} | [${t.name}](${t.url}) | ${desc} | ${t.stars.toLocaleString()} | ${t.updated} |`);
     }
   }
   lines.push("");
 
-  // 4. Agent / RAG / LLM 应用
+  // 5. Agent / RAG / LLM 应用
   lines.push("## 🧠 Agent / RAG / LLM 应用");
   lines.push("");
-  if (sec4_hn.length === 0 && sec4_arxiv.length === 0) {
+  if (sec5_hn.length === 0 && sec5_arxiv.length === 0) {
     lines.push("_今日暂无相关更新_");
   } else {
-    lines.push(...mdHNList(sec4_hn));
-    for (const p of sec4_arxiv) {
+    lines.push(...mdHNList(sec5_hn));
+    for (const p of sec5_arxiv) {
       const authStr = p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
       lines.push(`- **[${p.title}](${p.link})**`);
       lines.push(`  ${authStr} | ${p.published}`);
@@ -519,27 +545,27 @@ function generateMarkdown(date, sections) {
   }
   lines.push("");
 
-  // 5. 开源热点
-  lines.push("## 🔥 开源热点");
+  // 6. 开源热点
+  lines.push("## 🔥 开源热点（近 14 天新项目）");
   lines.push("");
-  if (sec5_gh_hot.length === 0) lines.push("_今日暂无新兴开源项目_");
-  else lines.push(...mdGHList(sec5_gh_hot, true));
+  if (sec6_gh_hot.length === 0) lines.push("_今日暂无新兴开源项目_");
+  else lines.push(...mdGHList(sec6_gh_hot, true));
   lines.push("");
 
-  // 6. 前端 / 数据可视化
+  // 7. 前端 / 数据可视化
   lines.push("## 📊 前端 / 数据可视化");
   lines.push("");
-  if (sec6_gh.length === 0 && sec6_hn.length === 0) lines.push("_今日暂无相关更新_");
-  else { lines.push(...mdGHList(sec6_gh)); lines.push(...mdHNList(sec6_hn)); }
+  if (sec7_gh.length === 0 && sec7_hn.length === 0) lines.push("_今日暂无相关更新_");
+  else { lines.push(...mdGHList(sec7_gh)); lines.push(...mdHNList(sec7_hn)); }
   lines.push("");
 
-  // 7. 值得精读的论文
+  // 8. 值得精读的论文
   lines.push("## 📄 值得精读的论文");
   lines.push("");
-  if (sec7_hf.length === 0) {
+  if (sec8_hf.length === 0) {
     lines.push("_今日暂无推荐论文_");
   } else {
-    for (const p of sec7_hf) {
+    for (const p of sec8_hf) {
       const authStr = p.authors.join(", ") + (p.authors.length >= 3 ? " et al." : "");
       lines.push(`- **[${p.title}](${p.link})** 👍 ${p.upvotes}`);
       lines.push(`  ${authStr}`);
@@ -559,7 +585,7 @@ function generateMarkdown(date, sections) {
 // ─── Plain Text Output ────────────────────────────────────
 
 function generatePlainText(date, sections) {
-  const { sec1_hn, sec2_gh, sec2_hn, sec3_top, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf } = sections;
+  const { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_top, sec5_hn, sec5_arxiv, sec6_gh_hot, sec7_gh, sec7_hn, sec8_hf } = sections;
   const lines = [];
   const sep = "─".repeat(60);
 
@@ -606,10 +632,22 @@ function generatePlainText(date, sections) {
   lines.push("");
 
   // 3
+  lines.push("[🧩 AI 增强生态（Skills / MCP / Plugins）]");
+  lines.push("");
+  if (sec3_gh.length === 0 && sec3_hn.length === 0) lines.push("  今日暂无");
+  else { txtGH(sec3_gh); sec3_hn.forEach((s, i) => {
+    lines.push(`  ${sec3_gh.length + i + 1}. ${s.title}`);
+    lines.push(`     ⬆ ${s.score} pts`);
+    lines.push(`     ${s.url}`);
+    lines.push("");
+  }); }
+  lines.push("");
+
+  // 4
   lines.push("[🏆 AI 工具生态 Top 5]");
   lines.push("");
-  if (sec3_top.length === 0) lines.push("  未能获取");
-  else sec3_top.forEach((t, i) => {
+  if (sec4_top.length === 0) lines.push("  未能获取");
+  else sec4_top.forEach((t, i) => {
     lines.push(`  ${i + 1}. [${t.category}] ${t.name}  ⭐ ${t.stars.toLocaleString()}  更新:${t.updated}`);
     const desc = t.description;
     if (desc) lines.push(`     ${desc.slice(0, 60)}`);
@@ -618,36 +656,36 @@ function generatePlainText(date, sections) {
   });
   lines.push("");
 
-  // 4
+  // 5
   lines.push("[🧠 Agent / RAG / LLM 应用]");
   lines.push("");
   let idx = 1;
-  sec4_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
-  sec4_arxiv.forEach((p) => { lines.push(`  ${idx++}. ${p.title}`); lines.push(`     ${p.summary.slice(0, 120)}...`); lines.push(`     ${p.link}`); lines.push(""); });
+  sec5_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
+  sec5_arxiv.forEach((p) => { lines.push(`  ${idx++}. ${p.title}`); lines.push(`     ${p.summary.slice(0, 120)}...`); lines.push(`     ${p.link}`); lines.push(""); });
   if (idx === 1) lines.push("  今日暂无");
-  lines.push("");
-
-  // 5
-  lines.push("[🔥 开源热点]");
-  lines.push("");
-  if (sec5_gh_hot.length === 0) lines.push("  今日暂无");
-  else txtGH(sec5_gh_hot);
   lines.push("");
 
   // 6
-  lines.push("[📊 前端 / 数据可视化]");
+  lines.push("[🔥 开源热点（近 14 天新项目）]");
   lines.push("");
-  idx = 1;
-  sec6_gh.forEach((r) => { const d = r.description; lines.push(`  ${idx++}. ${r.name}  ⭐ ${r.stars.toLocaleString()}  [${r.language}]`); if (d) lines.push(`     ${d.slice(0, 80)}`); lines.push(`     ${r.url}`); lines.push(""); });
-  sec6_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
-  if (idx === 1) lines.push("  今日暂无");
+  if (sec6_gh_hot.length === 0) lines.push("  今日暂无");
+  else txtGH(sec6_gh_hot);
   lines.push("");
 
   // 7
+  lines.push("[📊 前端 / 数据可视化]");
+  lines.push("");
+  idx = 1;
+  sec7_gh.forEach((r) => { const d = r.description; lines.push(`  ${idx++}. ${r.name}  ⭐ ${r.stars.toLocaleString()}  [${r.language}]`); if (d) lines.push(`     ${d.slice(0, 80)}`); lines.push(`     ${r.url}`); lines.push(""); });
+  sec7_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
+  if (idx === 1) lines.push("  今日暂无");
+  lines.push("");
+
+  // 8
   lines.push("[📄 值得精读的论文]");
   lines.push("");
-  if (sec7_hf.length === 0) lines.push("  今日暂无");
-  else sec7_hf.forEach((p, i) => {
+  if (sec8_hf.length === 0) lines.push("  今日暂无");
+  else sec8_hf.forEach((p, i) => {
     lines.push(`  ${i + 1}. ${p.title}  👍 ${p.upvotes}`);
     lines.push(`     ${p.summary.slice(0, 120)}...`);
     lines.push(`     ${p.link}`);
