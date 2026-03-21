@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:deepwiki.com)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:docs.open-metadata.org)",
+      "WebFetch(domain:python.langchain.com)",
+      "WebFetch(domain:docs.langchain.com)",
+      "WebFetch(domain:www.elastic.co)",
+      "WebFetch(domain:www.lazyvim.org)",
+      "WebFetch(domain:lazyvim.github.io)",
+      "WebFetch(domain:yazi-rs.github.io)",
+      "WebFetch(domain:www.pinecone.io)",
+      "WebFetch(domain:www.builder.io)",
+      "WebFetch(domain:freek.dev)",
+      "WebFetch(domain:steipete.me)",
+      "WebFetch(domain:karpathy.ai)",
+      "WebFetch(domain:danielmiessler.com)",
+      "WebFetch(domain:news.ycombinator.com)",
+      "WebFetch(domain:lobste.rs)",
+      "WebFetch(domain:unpkg.com)",
+      "WebFetch(domain:www.youtube.com)",
+      "Bash(python3 -m json.tool)",
+      "Bash(/Users/tianqiyin/.claude/statusline.sh)",
+      "WebFetch(domain:claudelog.com)"
+    ]
+  }
+}

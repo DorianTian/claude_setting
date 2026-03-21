@@ -247,44 +247,6 @@ async function fetchGitHub() {
   return allRepos;
 }
 
-// ─── GitHub: AI Tools Top 5 (fixed repo list, ecosystem landscape) ─
-
-async function fetchAIToolsTop() {
-  console.log("🏆 Fetching AI Tools Top 5...");
-
-  // Pinned repos per category — the actual ecosystem leaders
-  const repos = [
-    { repo: "langchain-ai/langchain", category: "AI Framework" },
-    { repo: "ollama/ollama", category: "本地推理" },
-    { repo: "getcursor/cursor", category: "AI Coding" },
-    { repo: "langgenius/dify", category: "AI Platform" },
-    { repo: "qdrant/qdrant", category: "Vector DB" },
-  ];
-
-  const tools = [];
-  for (const { repo, category } of repos) {
-    const data = await fetchJSON(
-      `https://api.github.com/repos/${repo}`,
-      { headers: { Accept: "application/vnd.github.v3+json" } }
-    );
-    if (data && data.full_name) {
-      tools.push({
-        name: data.full_name,
-        description: (data.description || "").slice(0, 80),
-        stars: data.stargazers_count,
-        language: data.language || "N/A",
-        url: data.html_url,
-        category,
-        updated: data.pushed_at?.split("T")[0] || "",
-      });
-    }
-    await new Promise((r) => setTimeout(r, 800));
-  }
-
-  console.log(`  Found ${tools.length} top tools`);
-  return tools;
-}
-
 // ─── ArXiv ─────────────────────────────────────────────────
 
 async function fetchArxiv() {
@@ -381,7 +343,7 @@ async function fetchHFPapers() {
 
 // ─── Categorize & Build Sections ───────────────────────────
 
-function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop) {
+function buildSections(hnStories, githubRepos, arxivPapers, hfPapers) {
   const usedHN = new Set();
   const usedGH = new Set();
 
@@ -399,18 +361,9 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop
       .map((s) => { usedHN.add(s.url); return s; });
   }
 
-  function pickGH(keywords, n, preferNew = false) {
-    let repos = githubRepos
-      .filter((r) => !usedGH.has(r.name) && matchKeywords(r.text, keywords));
-
-    if (preferNew) {
-      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString().split("T")[0];
-      const newRepos = repos.filter((r) => r.created > cutoff);
-      if (newRepos.length >= n) repos = newRepos;
-    }
-
-    return repos
+  function pickGH(keywords, n) {
+    return githubRepos
+      .filter((r) => !usedGH.has(r.name) && matchKeywords(r.text, keywords))
       .sort((a, b) => {
         const sa = matchScore(a.text, keywords);
         const sb = matchScore(b.text, keywords);
@@ -424,37 +377,34 @@ function buildSections(hnStories, githubRepos, arxivPapers, hfPapers, aiToolsTop
   const sec1_hn = pickHN(KW_AI_PRODUCT, 5, 50);
 
   // ── Section 2: AI 工程与工具 (Top 10) ──
-  const sec2_gh = pickGH(KW_AI_TOOLS, 7, true);
+  const sec2_gh = pickGH(KW_AI_TOOLS, 7);
   const sec2_hn = pickHN(KW_AI_TOOLS, 3);
 
   // ── Section 3: AI 增强生态 (Top 5) — Skills / MCP / Plugins ──
-  const sec3_gh = pickGH(KW_AI_ENHANCE, 3, true);
+  const sec3_gh = pickGH(KW_AI_ENHANCE, 3);
   const sec3_hn = pickHN(KW_AI_ENHANCE, 2);
 
-  // ── Section 4: AI 工具生态 Top 5 ──
-  const sec4_top = aiToolsTop;
-
-  // ── Section 5: Agent / RAG / LLM 应用 (Top 5) ──
-  const sec5_hn = pickHN(KW_AGENT_RAG, 3);
-  const sec5_arxiv = arxivPapers
+  // ── Section 4: Agent / RAG / LLM 应用 (Top 5) ──
+  const sec4_hn = pickHN(KW_AGENT_RAG, 3);
+  const sec4_arxiv = arxivPapers
     .filter((p) => matchKeywords(p.text, KW_AGENT_RAG))
     .slice(0, 2);
 
-  // ── Section 6: 开源热点 (Top 5) — 未被其他板块选中的高 star 活跃项目 ──
-  const sec6_gh_hot = githubRepos
+  // ── Section 5: 开源热点 (Top 5) — 未被其他板块选中的高 star 活跃项目 ──
+  const sec5_gh_hot = githubRepos
     .filter((r) => !usedGH.has(r.name))
     .sort((a, b) => b.stars - a.stars)
     .slice(0, 5)
     .map((r) => { usedGH.add(r.name); return r; });
 
-  // ── Section 7: 前端 / 数据可视化 (Top 5) ──
-  const sec7_gh = pickGH(KW_FRONTEND_DATAVIZ, 3, true);
-  const sec7_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
+  // ── Section 6: 前端 / 数据可视化 (Top 5) ──
+  const sec6_gh = pickGH(KW_FRONTEND_DATAVIZ, 3);
+  const sec6_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
 
-  // ── Section 8: 值得精读的论文 (Top 5) ──
-  const sec8_hf = hfPapers.slice(0, 5);
+  // ── Section 7: 值得精读的论文 (Top 5) ──
+  const sec7_hf = hfPapers.slice(0, 5);
 
-  return { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_top, sec5_hn, sec5_arxiv, sec6_gh_hot, sec7_gh, sec7_hn, sec8_hf };
+  return { sec1_hn, sec2_gh, sec2_hn, sec3_gh, sec3_hn, sec4_hn, sec4_arxiv, sec5_gh_hot, sec6_gh, sec6_hn, sec7_hf };
 }
 
 // ─── Markdown Output ───────────────────────────────────────

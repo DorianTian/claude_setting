@@ -129,6 +129,7 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
   echo ""
   echo "▶ Config files..."
   [[ "$INSTALL_SETTINGS" == "true" ]] && safe_install "$SCRIPT_DIR/settings.json" "$CLAUDE_DIR/settings.json" "settings.json"
+  [[ "$INSTALL_SETTINGS" == "true" && -f "$SCRIPT_DIR/settings.local.json" ]] && safe_install "$SCRIPT_DIR/settings.local.json" "$CLAUDE_DIR/settings.local.json" "settings.local.json"
   if [[ "$INSTALL_STATUSLINE" == "true" ]]; then
     # CCometixLine (Rust) — requires cargo
     if command -v ccometixline &>/dev/null; then
