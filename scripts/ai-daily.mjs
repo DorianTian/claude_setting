@@ -10,7 +10,7 @@
  *   4. Agent / RAG / LLM 应用 (Top 5)
  *   5. 开源热点 (Top 5, 近 30 天活跃)
  *   6. 前端 / 数据可视化 (Top 5)
- *   7. 值得精读的论文 (Top 5)
+ *   7. 值得关注的论文 (Top 5) — ArXiv 关键词过滤
  *
  * Output: ~/AI-Daily/{YYYY-MM}/{YYYY-MM-DD}.md + .txt
  *
@@ -259,7 +259,7 @@ async function fetchArxiv() {
   if (!xml) return [];
 
   const entries = xml.split("<entry>").slice(1);
-  return entries.map((entry) => {
+  const papers = entries.map((entry) => {
     const getTag = (tag) => {
       const match = entry.match(
         new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`)
@@ -282,15 +282,24 @@ async function fetchArxiv() {
       if (authors.length < 3) authors.push(m[1]);
     }
 
-    return {
-      title,
-      summary,
-      authors,
-      link,
-      published,
-      text: title + " " + summary,
-    };
+    return { title, summary, authors, link, published, text: title + " " + summary };
   });
+
+  // Only keep papers related to practical AI topics
+  const KW_PAPER_FILTER = [
+    "agent", "rag", "retrieval", "llm", "language model",
+    "prompt", "fine-tun", "instruction", "chat", "code gen",
+    "tool use", "function call", "benchmark", "evaluation",
+    "multimodal", "vision-language", "embedding",
+    "reasoning", "planning", "chain-of-thought",
+    "diffusion", "generation", "transformer",
+  ];
+  const filtered = papers.filter((p) =>
+    KW_PAPER_FILTER.some((kw) => p.text.toLowerCase().includes(kw))
+  );
+
+  console.log(`  Found ${filtered.length} relevant papers (from ${papers.length} total)`);
+  return filtered;
 }
 
 // ─── Categorize & Build Sections ───────────────────────────
@@ -338,9 +347,11 @@ function buildSections(hnStories, githubRepos, arxivPapers) {
 
   // ── Section 4: Agent / RAG / LLM 应用 (Top 5) ──
   const sec4_hn = pickHN(KW_AGENT_RAG, 3);
+  const usedArxiv = new Set();
   const sec4_arxiv = arxivPapers
     .filter((p) => matchKeywords(p.text, KW_AGENT_RAG))
-    .slice(0, 2);
+    .slice(0, 2)
+    .map((p) => { usedArxiv.add(p.link); return p; });
 
   // ── Section 5: 开源热点 (Top 5) — 未被其他板块选中的高 star 活跃项目 ──
   const sec5_gh_hot = githubRepos
@@ -353,8 +364,7 @@ function buildSections(hnStories, githubRepos, arxivPapers) {
   const sec6_gh = pickGH(KW_FRONTEND_DATAVIZ, 3);
   const sec6_hn = pickHN(KW_FRONTEND_DATAVIZ, 2, 30, 2);
 
-  // ── Section 7: 值得精读的论文 (Top 5) — ArXiv 中未被板块 4 选走的 ──
-  const usedArxiv = new Set(sec4_arxiv.map((p) => p.link));
+  // ── Section 7: 值得关注的论文 (Top 5) — ArXiv 已过滤，未被板块 4 选走的 ──
   const sec7_arxiv = arxivPapers
     .filter((p) => !usedArxiv.has(p.link))
     .slice(0, 5);
@@ -447,8 +457,8 @@ function generateMarkdown(date, sections) {
   else { lines.push(...mdGHList(sec6_gh)); lines.push(...mdHNList(sec6_hn)); }
   lines.push("");
 
-  // 7. 值得精读的论文
-  lines.push("## 📄 值得精读的论文");
+  // 7. 值得关注的论文
+  lines.push("## 📄 值得关注的论文");
   lines.push("");
   if (sec7_arxiv.length === 0) {
     lines.push("_今日暂无推荐论文_");
@@ -536,7 +546,7 @@ function generatePlainText(date, sections) {
   lines.push("");
   let idx = 1;
   sec4_hn.forEach((s) => { lines.push(`  ${idx++}. ${s.title}`); lines.push(`     ⬆ ${s.score} pts`); lines.push(`     ${s.url}`); lines.push(""); });
-  sec4_arxiv.forEach((p) => { lines.push(`  ${idx++}. ${p.title}`); lines.push(`     ${p.summary.slice(0, 120)}...`); lines.push(`     ${p.link}`); lines.push(""); });
+  sec4_arxiv.forEach((p) => { lines.push(`  ${idx++}. ${p.title}`); lines.push(`     ${p.authors.join(", ")} | ${p.published}`); lines.push(`     ${p.link}`); lines.push(""); });
   if (idx === 1) lines.push("  今日暂无");
   lines.push("");
 
@@ -557,13 +567,12 @@ function generatePlainText(date, sections) {
   lines.push("");
 
   // 7
-  lines.push("[📄 值得精读的论文]");
+  lines.push("[📄 值得关注的论文]");
   lines.push("");
   if (sec7_arxiv.length === 0) lines.push("  今日暂无");
   else sec7_arxiv.forEach((p, i) => {
     lines.push(`  ${i + 1}. ${p.title}`);
     lines.push(`     ${p.authors.join(", ")} | ${p.published}`);
-    lines.push(`     ${p.summary.slice(0, 120)}...`);
     lines.push(`     ${p.link}`);
     lines.push("");
   });
