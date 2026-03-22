@@ -5,8 +5,8 @@
 ## Quick Start
 
 ```bash
-git clone git@github.com:DorianTian/claude_setting.git ~/Desktop/workspace/claude-code-config
-cd ~/Desktop/workspace/claude-code-config
+git clone git@github.com:DorianTian/claude_setting.git ~/dev-env/claude_setting
+cd ~/dev-env/claude_setting
 ./install.sh              # Interactive mode
 ./install.sh --all        # Non-interactive: install all config files
 ./install.sh --link       # Register CLI command
@@ -23,8 +23,8 @@ claude-config --all --memory --knowledge  # Full setup
 
 ```bash
 # 1. Clone
-git clone git@github.com:DorianTian/claude_setting.git ~/Desktop/workspace/claude-code-config
-cd ~/Desktop/workspace/claude-code-config
+git clone git@github.com:DorianTian/claude_setting.git ~/dev-env/claude_setting
+cd ~/dev-env/claude_setting
 
 # 2. Interactive install (select what you need)
 ./install.sh
@@ -100,10 +100,10 @@ Local conflicts are overwritten directly — iCloud is source of truth, script n
 
 ```bash
 # 手动抓取
-node ~/Desktop/workspace/claude-code-config/scripts/ai-daily.mjs
+node ~/dev-env/claude_setting/scripts/ai-daily.mjs
 
 # 主力机自动抓取（crontab，每天 9:07 AM）
-# 7 9 * * * /opt/homebrew/bin/node ~/Desktop/workspace/claude-code-config/scripts/ai-daily.mjs >> ~/AI-Daily/cron.log 2>&1
+# 7 9 * * * /opt/homebrew/bin/node ~/dev-env/claude_setting/scripts/ai-daily.mjs >> ~/AI-Daily/cron.log 2>&1
 
 # 其他 Mac 只需 symlink
 claude-config --ai-daily
