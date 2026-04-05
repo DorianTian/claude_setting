@@ -95,6 +95,17 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session-start-context.sh"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
