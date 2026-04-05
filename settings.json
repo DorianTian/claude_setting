@@ -1,10 +1,11 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-
-  "effortLevel": "high",
-  "alwaysThinkingEnabled": true,
   "cleanupPeriodDays": 365,
-
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
+    "BASH_DEFAULT_TIMEOUT_MS": "120000",
+    "BASH_MAX_TIMEOUT_MS": "600000"
+  },
   "permissions": {
     "allow": [
       "Bash",
@@ -45,7 +46,6 @@
       "Edit(**/*secret*)"
     ]
   },
-
   "hooks": {
     "PreToolUse": [
       {
@@ -64,21 +64,52 @@
             "command": "input=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty'); if echo \"$input\" | grep -qE 'DROP\\s+(DATABASE|TABLE|SCHEMA)'; then echo 'BLOCK: DROP DATABASE/TABLE/SCHEMA requires manual confirmation.'; exit 2; fi"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/credential-guard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/post-edit-format.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/post-commit-verify.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session-memory-check.sh"
+          }
+        ]
       }
     ]
   },
-
   "statusLine": {
     "type": "command",
     "command": "$HOME/.claude/statusline.sh"
   },
-
-  "env": {
-    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
-    "BASH_DEFAULT_TIMEOUT_MS": "120000",
-    "BASH_MAX_TIMEOUT_MS": "600000"
-  },
-
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
@@ -92,7 +123,6 @@
     "feature-dev@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true
   },
-
   "extraKnownMarketplaces": {
     "planning-with-files": {
       "source": {
@@ -100,5 +130,7 @@
         "repo": "OthmanAdi/planning-with-files"
       }
     }
-  }
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high"
 }

@@ -208,7 +208,8 @@ fi
 
 line1="${blue}${model_name}${reset}"
 line1+="${sep}"
-line1+="✍️ ${pct_color}${pct_used}%${reset}"
+ctx_bar=$(build_bar "$pct_used" 6)
+line1+="${ctx_bar} ${pct_color}${pct_used}%${reset}"
 line1+="${sep}"
 line1+="${cyan}${dirname}${reset}"
 if [ -n "$git_branch" ]; then

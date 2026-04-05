@@ -169,6 +169,31 @@ if [[ "$INSTALL_SETTINGS" == "true" || "$INSTALL_STATUSLINE" == "true" || "$INST
   fi
 fi
 
+# ── Hooks ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ Hooks..."
+  mkdir -p "$CLAUDE_DIR/hooks"
+  for hook_file in "$SCRIPT_DIR/hooks/"*.sh; do
+    [[ -f "$hook_file" ]] || continue
+    hook_name=$(basename "$hook_file")
+    safe_install "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "hooks/$hook_name"
+    chmod +x "$CLAUDE_DIR/hooks/$hook_name"
+  done
+fi
+
+# ── Agents ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ Agents..."
+  mkdir -p "$CLAUDE_DIR/agents"
+  for agent_file in "$SCRIPT_DIR/agents/"*.md; do
+    [[ -f "$agent_file" ]] || continue
+    agent_name=$(basename "$agent_file")
+    safe_install "$agent_file" "$CLAUDE_DIR/agents/$agent_name" "agents/$agent_name"
+  done
+fi
+
 # ── Dependency check (only if statusline involved) ──
 if [[ "$INSTALL_STATUSLINE" == "true" ]]; then
   echo ""
