@@ -141,6 +141,8 @@ effort="default"
 settings_path="$HOME/.claude/settings.json"
 if [ -f "$settings_path" ]; then
     effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
+    env_effort=$(jq -r '.env.CLAUDE_CODE_EFFORT_LEVEL // empty' "$settings_path" 2>/dev/null)
+    [ -n "$env_effort" ] && effort="$env_effort"
 fi
 
 # ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Thinking ──
@@ -225,6 +227,7 @@ if [ -n "$session_duration" ]; then
 fi
 line1+="${sep}"
 case "$effort" in
+    max)    line1+="${orange}●● ${effort}${reset}" ;;
     high)   line1+="${magenta}● ${effort}${reset}" ;;
     medium) line1+="${dim}◑ ${effort}${reset}" ;;
     low)    line1+="${dim}◔ ${effort}${reset}" ;;
