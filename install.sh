@@ -215,6 +215,22 @@ if [[ "$INSTALL_SETTINGS" == "true" ]]; then
   done
 fi
 
+# ── Skills ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ Skills..."
+  for skill_dir in "$SCRIPT_DIR/skills/"*/; do
+    [[ -d "$skill_dir" ]] || continue
+    skill_name=$(basename "$skill_dir")
+    mkdir -p "$CLAUDE_DIR/skills/$skill_name"
+    for skill_file in "$skill_dir"*; do
+      [[ -f "$skill_file" ]] || continue
+      fname=$(basename "$skill_file")
+      safe_install "$skill_file" "$CLAUDE_DIR/skills/$skill_name/$fname" "skills/$skill_name/$fname"
+    done
+  done
+fi
+
 # ── HUD ──
 if [[ "$INSTALL_SETTINGS" == "true" ]]; then
   echo ""
@@ -529,6 +545,19 @@ if [[ "$SYNC" == "true" ]]; then
   for f in "$CLAUDE_DIR/hooks/lib/"*; do
     [[ -f "$f" ]] || continue
     sync_file "$f" "$SCRIPT_DIR/hooks/lib/$(basename "$f")" "hooks/lib/$(basename "$f")"
+  done
+
+  # Skills
+  echo ""
+  echo "▶ Skills..."
+  for skill_dir in "$CLAUDE_DIR/skills/"*/; do
+    [[ -d "$skill_dir" ]] || continue
+    skill_name=$(basename "$skill_dir")
+    mkdir -p "$SCRIPT_DIR/skills/$skill_name"
+    for f in "$skill_dir"*; do
+      [[ -f "$f" ]] || continue
+      sync_file "$f" "$SCRIPT_DIR/skills/$skill_name/$(basename "$f")" "skills/$skill_name/$(basename "$f")"
+    done
   done
 
   # Agents
