@@ -27,7 +27,29 @@
       "WebFetch(domain:www.youtube.com)",
       "Bash(python3 -m json.tool)",
       "Bash(/Users/tianqiyin/.claude/statusline.sh)",
-      "WebFetch(domain:claudelog.com)"
+      "WebFetch(domain:claudelog.com)",
+      "WebFetch(domain:google.github.io)",
+      "WebFetch(domain:airbnb.io)",
+      "WebFetch(domain:typescript-eslint.io)",
+      "WebFetch(domain:javascript.airbnb.tech)",
+      "WebFetch(domain:golangci-lint.run)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:dotfyle.com)",
+      "WebFetch(domain:tonsky.me)",
+      "WebFetch(domain:www.icauto.com.cn)",
+      "WebFetch(domain:www.chinahighlights.com)",
+      "WebFetch(domain:m.gmw.cn)",
+      "WebFetch(domain:www.greentourasia.com)",
+      "WebFetch(domain:www.ctnews.com.cn)",
+      "WebFetch(domain:news.cncn.com)",
+      "WebFetch(domain:m.ctrip.com)",
+      "WebFetch(domain:hotels.ctrip.com)",
+      "WebFetch(domain:m.bendibao.com)",
+      "WebFetch(domain:www.booking.com)",
+      "WebFetch(domain:you.ctrip.com)",
+      "WebFetch(domain:www.extrabux.com)",
+      "Bash(cp ~/.claude/settings.json ~/dev-env/claude_setting/settings.json)",
+      "Bash(cp ~/.claude/statusline.sh ~/dev-env/claude_setting/statusline.sh)"
     ]
   }
 }

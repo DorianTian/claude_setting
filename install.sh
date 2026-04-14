@@ -3,13 +3,16 @@ set -euo pipefail
 
 # ══════════════════════════════════════════════════════════
 # claude-config — Claude Code Config Installer
+# Includes: settings, hooks (superpowers + OMC), agents,
+#           HUD, plugins, OMC npm package, iCloud sync
 # Usage:
 #   claude-config                    Interactive mode
-#   claude-config --all              Install all config files
+#   claude-config --all              Install all config files + OMC + plugins
 #   claude-config --statusline       Install statusline only
 #   claude-config --knowledge        Symlink Knowledge to iCloud
 #   claude-config --ai-daily         Symlink AI-Daily to iCloud
 #   claude-config --link             Register CLI command (~/.local/bin/claude-config)
+#   claude-config --sync             Sync current ~/.claude config back to this repo
 #   Flags can be combined: claude-config --all --knowledge --ai-daily
 # ══════════════════════════════════════════════════════════
 
@@ -24,6 +27,7 @@ INSTALL_MCP=false
 KNOWLEDGE=false
 AI_DAILY=false
 LINK=false
+SYNC=false
 INTERACTIVE=false
 
 if [[ $# -eq 0 ]]; then
@@ -37,12 +41,13 @@ else
       --knowledge) KNOWLEDGE=true ;;
       --ai-daily) AI_DAILY=true ;;
       --link) LINK=true ;;
+      --sync) SYNC=true ;;
       --help|-h)
         echo "Usage: claude-config [options]"
         echo ""
         echo "  Config files:"
         echo "    (none)            Interactive mode"
-        echo "    --all             Install all config files (settings + statusline + CLAUDE.md + MCP)"
+        echo "    --all             Install all (settings + hooks + agents + HUD + OMC + plugins)"
         echo "    --statusline      Install statusline only"
         echo "    --mcp             Configure MCP servers (database connections)"
         echo ""
@@ -51,6 +56,7 @@ else
         echo "    --ai-daily        Symlink AI-Daily to iCloud"
         echo ""
         echo "  Other:"
+        echo "    --sync            Sync current ~/.claude config back to this repo"
         echo "    --link            Register 'claude-config' CLI command"
         echo "    --help            Show this help"
         echo ""
@@ -67,11 +73,11 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo "  claude-config — Claude Code Config Installer"
   echo "══════════════════════════════════════════════════════════"
   echo ""
-  echo "  Config files:"
-  echo "    1) settings.json       (deny rules + hooks + statusline + env)"
+  echo "  Install (repo → ~/.claude):"
+  echo "    1) settings.json       (permissions + hooks + plugins + env)"
   echo "    2) statusline.sh       (dir + branch / model + context + cost)"
-  echo "    3) CLAUDE.md           (global instructions)"
-  echo "    4) All config files    (1 + 2 + 3 + 8)"
+  echo "    3) CLAUDE.md           (global instructions via iCloud symlink)"
+  echo "    4) All config files    (1 + 2 + 3 + hooks + agents + HUD + OMC + plugins + MCP)"
   echo ""
   echo "  iCloud sync (symlink, real-time):"
   echo "    5) Sync Knowledge      → iCloud"
@@ -80,7 +86,8 @@ if [[ "$INTERACTIVE" == "true" ]]; then
   echo "  Other:"
   echo "    7) Register CLI        (claude-config command)"
   echo "    8) MCP servers         (database connections)"
-  echo "    0) Full setup          (all configs + sync + CLI + MCP)"
+  echo "    9) Sync back           (current ~/.claude → this repo)"
+  echo "    0) Full setup          (all configs + iCloud + CLI + MCP)"
   echo ""
   printf "  Enter choices (e.g. 1 2 5, or 0 for full): "
   read -r choices
@@ -95,6 +102,7 @@ if [[ "$INTERACTIVE" == "true" ]]; then
       6) AI_DAILY=true ;;
       7) LINK=true ;;
       8) INSTALL_MCP=true ;;
+      9) SYNC=true ;;
       0) INSTALL_SETTINGS=true; INSTALL_STATUSLINE=true; INSTALL_CLAUDE_MD=true; INSTALL_MCP=true
          KNOWLEDGE=true; AI_DAILY=true; LINK=true ;;
       *) echo "  ⚠ Unknown option: $choice" ;;
@@ -173,12 +181,25 @@ fi
 if [[ "$INSTALL_SETTINGS" == "true" ]]; then
   echo ""
   echo "▶ Hooks..."
-  mkdir -p "$CLAUDE_DIR/hooks"
+  mkdir -p "$CLAUDE_DIR/hooks/lib"
+  # Shell hooks (superpowers safety layer)
   for hook_file in "$SCRIPT_DIR/hooks/"*.sh; do
     [[ -f "$hook_file" ]] || continue
     hook_name=$(basename "$hook_file")
     safe_install "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "hooks/$hook_name"
     chmod +x "$CLAUDE_DIR/hooks/$hook_name"
+  done
+  # Node.js hooks (OMC orchestration layer)
+  for hook_file in "$SCRIPT_DIR/hooks/"*.mjs; do
+    [[ -f "$hook_file" ]] || continue
+    hook_name=$(basename "$hook_file")
+    safe_install "$hook_file" "$CLAUDE_DIR/hooks/$hook_name" "hooks/$hook_name"
+  done
+  # Shared lib modules (OMC)
+  for lib_file in "$SCRIPT_DIR/hooks/lib/"*; do
+    [[ -f "$lib_file" ]] || continue
+    lib_name=$(basename "$lib_file")
+    safe_install "$lib_file" "$CLAUDE_DIR/hooks/lib/$lib_name" "hooks/lib/$lib_name"
   done
 fi
 
@@ -192,6 +213,82 @@ if [[ "$INSTALL_SETTINGS" == "true" ]]; then
     agent_name=$(basename "$agent_file")
     safe_install "$agent_file" "$CLAUDE_DIR/agents/$agent_name" "agents/$agent_name"
   done
+fi
+
+# ── HUD ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ HUD (statusline widget)..."
+  mkdir -p "$CLAUDE_DIR/hud/lib"
+  for hud_file in "$SCRIPT_DIR/hud/"*.{sh,mjs}; do
+    [[ -f "$hud_file" ]] || continue
+    hud_name=$(basename "$hud_file")
+    safe_install "$hud_file" "$CLAUDE_DIR/hud/$hud_name" "hud/$hud_name"
+    [[ "$hud_name" == *.sh ]] && chmod +x "$CLAUDE_DIR/hud/$hud_name"
+  done
+  for lib_file in "$SCRIPT_DIR/hud/lib/"*; do
+    [[ -f "$lib_file" ]] || continue
+    lib_name=$(basename "$lib_file")
+    safe_install "$lib_file" "$CLAUDE_DIR/hud/lib/$lib_name" "hud/lib/$lib_name"
+  done
+fi
+
+# ── OMC npm package ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ OMC (oh-my-claudecode)..."
+  if command -v npm &>/dev/null; then
+    if npm list -g oh-my-claude-sisyphus &>/dev/null; then
+      echo "  ✓ oh-my-claude-sisyphus already installed"
+    else
+      echo "  ▶ Installing oh-my-claude-sisyphus..."
+      npm install -g oh-my-claude-sisyphus@latest 2>/dev/null && echo "  ✓ oh-my-claude-sisyphus installed" || echo "  ✗ install failed"
+    fi
+  else
+    echo "  ✗ npm not found — install Node.js first"
+  fi
+  # Write OMC config with node path
+  NODE_BIN=$(command -v node 2>/dev/null || echo "")
+  if [[ -n "$NODE_BIN" ]]; then
+    echo "{\"nodeBinary\":\"$NODE_BIN\"}" > "$CLAUDE_DIR/.omc-config.json"
+    echo "  ✓ .omc-config.json (node: $NODE_BIN)"
+  fi
+fi
+
+# ── Claude Code plugins ──
+if [[ "$INSTALL_SETTINGS" == "true" ]]; then
+  echo ""
+  echo "▶ Claude Code plugins..."
+  PLUGINS=(
+    "superpowers@claude-plugins-official"
+    "frontend-design@claude-plugins-official"
+    "skill-creator@claude-plugins-official"
+    "typescript-lsp@claude-plugins-official"
+    "gopls-lsp@claude-plugins-official"
+    "pyright-lsp@claude-plugins-official"
+    "telegram@claude-plugins-official"
+    "code-review@claude-plugins-official"
+    "feature-dev@claude-plugins-official"
+    "commit-commands@claude-plugins-official"
+  )
+  MARKETPLACE_PLUGINS=(
+    "planning-with-files@planning-with-files|OthmanAdi/planning-with-files"
+  )
+  if command -v claude &>/dev/null; then
+    for plugin in "${PLUGINS[@]}"; do
+      echo "  ▶ $plugin"
+      claude plugin install "$plugin" 2>/dev/null || echo "    (may need manual install)"
+    done
+    for entry in "${MARKETPLACE_PLUGINS[@]}"; do
+      plugin="${entry%%|*}"
+      repo="${entry##*|}"
+      echo "  ▶ $plugin (marketplace: $repo)"
+      claude plugin install "$plugin" 2>/dev/null || echo "    (may need manual install via marketplace)"
+    done
+  else
+    echo "  ℹ Claude CLI not found — plugins listed in settings.json will be enabled on first run"
+    echo "    Install missing plugins manually: claude plugin install <name>"
+  fi
 fi
 
 # ── Dependency check (only if statusline involved) ──
@@ -393,22 +490,91 @@ if [[ "$LINK" == "true" ]]; then
   fi
 fi
 
-# ── Summary ──
-echo ""
-echo "══════════════════════════════════════════════════════════"
-ITEMS=()
-[[ "$INSTALL_SETTINGS" == "true" ]] && ITEMS+=("settings.json")
-[[ "$INSTALL_STATUSLINE" == "true" ]] && ITEMS+=("statusline.sh")
-[[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
-[[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
-[[ "$AI_DAILY" == "true" ]] && ITEMS+=("AI-Daily→iCloud")
-[[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
-[[ "$INSTALL_MCP" == "true" ]] && ITEMS+=("MCP")
+# ── Sync back (current ~/.claude → this repo) ──
+if [[ "$SYNC" == "true" ]]; then
+  echo ""
+  echo "══════════════════════════════════════════════════════════"
+  echo "  claude-config — Syncing ~/.claude → repo"
+  echo "══════════════════════════════════════════════════════════"
 
-if [[ ${#ITEMS[@]} -eq 0 ]]; then
-  echo "  Nothing selected. Run 'claude-config' for interactive mode."
-else
-  echo "  ✅ Done! $(IFS=', '; echo "${ITEMS[*]}")"
-  echo "  Restart Claude Code to apply."
+  sync_file() {
+    local src="$1" dst="$2" name="$3"
+    if [[ ! -f "$src" ]]; then
+      echo "  - $name (not found, skipped)"
+      return
+    fi
+    if [[ -f "$dst" ]] && diff -q "$src" "$dst" &>/dev/null; then
+      echo "  = $name (unchanged)"
+    else
+      cp "$src" "$dst"
+      echo "  ↻ $name"
+    fi
+  }
+
+  # Config files
+  echo ""
+  echo "▶ Config files..."
+  sync_file "$CLAUDE_DIR/settings.json" "$SCRIPT_DIR/settings.json" "settings.json"
+  sync_file "$CLAUDE_DIR/settings.local.json" "$SCRIPT_DIR/settings.local.json" "settings.local.json"
+  sync_file "$CLAUDE_DIR/statusline.sh" "$SCRIPT_DIR/statusline.sh" "statusline.sh"
+
+  # Hooks (sh + mjs + lib)
+  echo ""
+  echo "▶ Hooks..."
+  mkdir -p "$SCRIPT_DIR/hooks/lib"
+  for f in "$CLAUDE_DIR/hooks/"*.sh "$CLAUDE_DIR/hooks/"*.mjs; do
+    [[ -f "$f" ]] || continue
+    sync_file "$f" "$SCRIPT_DIR/hooks/$(basename "$f")" "hooks/$(basename "$f")"
+  done
+  for f in "$CLAUDE_DIR/hooks/lib/"*; do
+    [[ -f "$f" ]] || continue
+    sync_file "$f" "$SCRIPT_DIR/hooks/lib/$(basename "$f")" "hooks/lib/$(basename "$f")"
+  done
+
+  # Agents
+  echo ""
+  echo "▶ Agents..."
+  mkdir -p "$SCRIPT_DIR/agents"
+  for f in "$CLAUDE_DIR/agents/"*.md; do
+    [[ -f "$f" ]] || continue
+    sync_file "$f" "$SCRIPT_DIR/agents/$(basename "$f")" "agents/$(basename "$f")"
+  done
+
+  # HUD
+  echo ""
+  echo "▶ HUD..."
+  mkdir -p "$SCRIPT_DIR/hud/lib"
+  for f in "$CLAUDE_DIR/hud/"*.{sh,mjs}; do
+    [[ -f "$f" ]] || continue
+    sync_file "$f" "$SCRIPT_DIR/hud/$(basename "$f")" "hud/$(basename "$f")"
+  done
+  for f in "$CLAUDE_DIR/hud/lib/"*; do
+    [[ -f "$f" ]] || continue
+    sync_file "$f" "$SCRIPT_DIR/hud/lib/$(basename "$f")" "hud/lib/$(basename "$f")"
+  done
+
+  echo ""
+  echo "  ✅ Sync complete. Review changes: cd $SCRIPT_DIR && git diff"
 fi
-echo "══════════════════════════════════════════════════════════"
+
+# ── Summary ──
+if [[ "$SYNC" != "true" ]]; then
+  echo ""
+  echo "══════════════════════════════════════════════════════════"
+  ITEMS=()
+  [[ "$INSTALL_SETTINGS" == "true" ]] && ITEMS+=("settings+hooks+agents+HUD+OMC+plugins")
+  [[ "$INSTALL_STATUSLINE" == "true" ]] && ITEMS+=("statusline.sh")
+  [[ "$INSTALL_CLAUDE_MD" == "true" ]] && ITEMS+=("CLAUDE.md")
+  [[ "$KNOWLEDGE" == "true" ]] && ITEMS+=("Knowledge→iCloud")
+  [[ "$AI_DAILY" == "true" ]] && ITEMS+=("AI-Daily→iCloud")
+  [[ "$LINK" == "true" ]] && ITEMS+=("CLI:claude-config")
+  [[ "$INSTALL_MCP" == "true" ]] && ITEMS+=("MCP")
+
+  if [[ ${#ITEMS[@]} -eq 0 ]]; then
+    echo "  Nothing selected. Run 'claude-config' for interactive mode."
+  else
+    echo "  ✅ Done! $(IFS=', '; echo "${ITEMS[*]}")"
+    echo "  Restart Claude Code to apply."
+  fi
+  echo "══════════════════════════════════════════════════════════"
+fi

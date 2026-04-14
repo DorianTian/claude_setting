@@ -74,6 +74,14 @@
             "command": "$HOME/.claude/hooks/credential-guard.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/pre-tool-use.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -94,6 +102,14 @@
             "command": "$HOME/.claude/hooks/post-commit-verify.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/post-tool-use.mjs\""
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -105,6 +121,14 @@
             "command": "$HOME/.claude/hooks/session-start-context.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/session-start.mjs\""
+          }
+        ]
       }
     ],
     "Stop": [
@@ -113,6 +137,42 @@
           {
             "type": "command",
             "command": "$HOME/.claude/hooks/session-memory-check.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/persistent-mode.mjs\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/code-simplifier.mjs\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/keyword-detector.mjs\""
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hooks/post-tool-use-failure.mjs\""
           }
         ]
       }
